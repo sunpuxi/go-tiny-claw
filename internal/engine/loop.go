@@ -54,7 +54,7 @@ func (a *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		log.Printf("========== [Turn %d] 开始 ==========\n", turnCount)
 
 		// 获取当前的可用的工具列表
-		availableTools := a.ToolRegistry.GetAvailableTools(ctx)
+		availableTools := a.ToolRegistry.GetAvailableTools()
 
 		// 如果当前打开了思考模式，那么第一次调用先不必传递工具列表，防止大模型盲目调用参数
 		if a.EnableThinking {
@@ -98,7 +98,7 @@ func (a *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 		for _, toolCall := range respMessage.ToolCalls {
 			log.Printf(" -> 🛠️ 执行工具: %s, 参数: %s\n", toolCall.Name, string(toolCall.Arguments))
 			// 通过 Registry 路由并执行底层工具
-			result := a.ToolRegistry.ExecuteToolCall(ctx, *toolCall)
+			result := a.ToolRegistry.Execute(ctx, *toolCall)
 			if result.IsError {
 				log.Printf(" -> ❌ 工具执行报错: %s\n", result.Output)
 			} else {

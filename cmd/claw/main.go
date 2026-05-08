@@ -8,59 +8,33 @@ import (
 
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
 	"github.com/sunpuxi/go-tiny-claw/internal/provider"
-	"github.com/sunpuxi/go-tiny-claw/internal/schema"
+	"github.com/sunpuxi/go-tiny-claw/internal/tools"
 )
 
-// 伪造的工具注册表 (用于测试 Provider 的工具提取能力)
-type mockRegistry struct{}
-
-func (m *mockRegistry) GetAvailableTools(ctx context.Context) []schema.ToolDefinition {
-	return []schema.ToolDefinition{
-		{
-			Name:        "get_weather",
-			Description: "获取指定城市的当前天气情况。",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"city": map[string]interface{}{
-						"type": "string",
-					},
-				},
-				"required": []string{"city"},
-			},
-		},
-	}
-}
-
-func (m *mockRegistry) ExecuteToolCall(ctx context.Context, call schema.ToolCall) schema.ToolResult {
-	log.Printf("  -> [Mock 工具执行] 获取 %s 的天气中...\n", call.Name)
-	return schema.ToolResult{
-		ToolCallID: call.ID,
-		Output:     "API 返回：今天是晴天，气温 25 度。",
-		IsError:    false,
-	}
-}
-
 func main() {
-	// 确保已设置 ZHIPU_API_KEY
+	// 确保设置了 ZHIPU_API_KEY
 	if os.Getenv("ZHIPU_API_KEY") == "" {
 		log.Fatal("请先导出 ZHIPU_API_KEY 环境变量")
 	}
 
+	// 1. 获取工作区物理边界
 	workDir, _ := os.Getwd()
 
-	// 1. 初始化真实的 Provider大脑 (指向智谱 GLM-4.5)
-	// 这里你可以任意切换 NewZhipuClaudeProvider 或 NewZhipuOpenAIProvider，效果完全一致！
+	// 2. 初始化真实的大脑 (指向智谱 GLM-4.5，使用上一讲的 OpenAI 适配器)
 	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
 
-	// 2. 注入伪造的工具注册表
-	registry := &mockRegistry{}
+	// 3. 初始化真实的 Tool Registry
+	registry := tools.NewRegistry()
 
-	// 3. 实例化并运行引擎，开启 EnableThinking = true (开启慢思考阶段！)
-	eng := engine.NewAgentEngine(llmProvider, registry, workDir, true)
+	// 4. 将真实的 ReadFile 工具挂载到注册表中
+	readFileTool := tools.NewReadFileTool(workDir)
+	registry.Register(readFileTool)
 
-	// 设定测试任务
-	prompt := "我想去北京跑步，帮我查查天气适合吗？"
+	// 5. 实例化核心引擎，由于任务简单，我们关闭思考阶段 (EnableThinking = false) 以加快速度
+	eng := engine.NewAgentEngine(llmProvider, registry, workDir, false)
+
+	// 6. 下发一个必须通过真实工具才能完成的任务
+	prompt := "请调用工具读取一下当前工作区目录下 hello.txt 文件的内容，并用一句话向我总结它说了什么。"
 
 	err := eng.Run(context.Background(), prompt)
 	if err != nil {
