@@ -1,4 +1,3 @@
-// internal/tools/bash.go
 package tools
 
 import (

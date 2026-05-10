@@ -134,7 +134,7 @@ func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, av
 
 	for _, tc := range choice.ToolCalls {
 		if tc.Type == "function" {
-			resultMsg.ToolCalls = append(resultMsg.ToolCalls, &schema.ToolCall{
+			resultMsg.ToolCalls = append(resultMsg.ToolCalls, schema.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: []byte(tc.Function.Arguments), // 提取 JSON 字符串字节

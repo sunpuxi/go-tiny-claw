@@ -132,7 +132,7 @@ func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, av
 			resultMsg.Content += block.Text
 		case "tool_use":
 			argsBytes, _ := json.Marshal(block.Input)
-			resultMsg.ToolCalls = append(resultMsg.ToolCalls, &schema.ToolCall{
+			resultMsg.ToolCalls = append(resultMsg.ToolCalls, schema.ToolCall{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: argsBytes,
