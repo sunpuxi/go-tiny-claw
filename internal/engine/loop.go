@@ -27,7 +27,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 	}
 }
 
-func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
+func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Reporter) error {
 	log.Printf("[Engine] 引擎启动，锁定工作区: %s\n", e.WorkDir)
 	log.Printf("[Engine] 慢思考模式 (Thinking Phase): %v\n", e.EnableThinking)
 
@@ -52,7 +52,11 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 		// Phase 1: 慢思考阶段
 		if e.EnableThinking {
-			log.Println("[Engine][Phase 1] 剥夺工具访问权，强制进入慢思考与规划阶段...")
+			// 思考阶段的输出
+			if repoter != nil {
+				repoter.OnThinking(ctx)
+			}
+
 			thinkResp, err := e.provider.Generate(ctx, contextHistory, nil)
 			if err != nil {
 				return fmt.Errorf("Thinking 阶段生成失败: %w", err)
@@ -72,8 +76,9 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 
 		contextHistory = append(contextHistory, *actionResp)
 
-		if actionResp.Content != "" {
+		if actionResp.Content != "" && repoter != nil {
 			fmt.Printf("🤖 [对外回复]: \n%s\n", actionResp.Content)
+			repoter.OnMessage(ctx, actionResp.Content)
 		}
 
 		if len(actionResp.ToolCalls) == 0 {
@@ -95,15 +100,20 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string) error {
 			go func(idx int, call schema.ToolCall) {
 				defer wg.Done()
 
-				log.Printf("  -> [Go-%d] 🛠️ 触发并行执行: %s\n", idx, call.Name)
+				if repoter != nil {
+					repoter.OnToolCall(ctx, toolCall.Name, string(toolCall.Arguments))
+				}
 
 				// 执行底层工具
 				result := e.registry.Execute(ctx, call)
 
-				if result.IsError {
-					log.Printf("  -> [Go-%d] ❌ 工具执行报错: %s\n", idx, result.Output)
-				} else {
-					log.Printf("  -> [Go-%d] ✅ 工具执行成功 (返回 %d 字节)\n", idx, len(result.Output))
+				// 将工具执行的结果返回客户端
+				if repoter != nil {
+					displayOut := result.Output
+					if len(displayOut) > 200 {
+						displayOut = displayOut[:200] + "...已截断"
+					}
+					repoter.OnToolResult(ctx, toolCall.Name, displayOut, result.IsError)
 				}
 
 				// 安全写入对应索引
