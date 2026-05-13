@@ -30,7 +30,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, workDir string, en
 	}
 }
 
-func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Reporter) error {
+func (e *AgentEngine) Run(ctx context.Context, userPrompt string, reporter Reporter) error {
 	systemMsg := e.composer.Build()
 
 	contextHistory := []schema.Message{
@@ -45,17 +45,13 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Report
 
 	for {
 		turnCount++
-		log.Printf("\n========== [Turn %d] 开始 ==========\n", turnCount)
-
 		availableTools := e.registry.GetAvailableTools()
-
 		// Phase 1: 慢思考阶段
 		if e.EnableThinking {
 			// 思考阶段的输出
-			if repoter != nil {
-				repoter.OnThinking(ctx)
+			if reporter != nil {
+				reporter.OnThinking(ctx)
 			}
-
 			thinkResp, err := e.provider.Generate(ctx, contextHistory, nil)
 			if err != nil {
 				return fmt.Errorf("Thinking 阶段生成失败: %w", err)
@@ -75,17 +71,15 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Report
 
 		contextHistory = append(contextHistory, *actionResp)
 
-		if actionResp.Content != "" && repoter != nil {
+		if actionResp.Content != "" && reporter != nil {
 			fmt.Printf("🤖 [对外回复]: \n%s\n", actionResp.Content)
-			repoter.OnMessage(ctx, actionResp.Content)
+			reporter.OnMessage(ctx, actionResp.Content)
 		}
 
 		if len(actionResp.ToolCalls) == 0 {
 			log.Println("[Engine] 模型未请求调用工具，任务宣告完成。")
 			break
 		}
-
-		log.Printf("[Engine] 模型请求并发调用 %d 个工具...\n", len(actionResp.ToolCalls))
 
 		// ================= 并发执行逻辑 =================
 
@@ -99,20 +93,20 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Report
 			go func(idx int, call schema.ToolCall) {
 				defer wg.Done()
 
-				if repoter != nil {
-					repoter.OnToolCall(ctx, toolCall.Name, string(toolCall.Arguments))
+				if reporter != nil {
+					reporter.OnToolCall(ctx, toolCall.Name, string(toolCall.Arguments))
 				}
 
 				// 执行底层工具
 				result := e.registry.Execute(ctx, call)
 
 				// 将工具执行的结果返回客户端
-				if repoter != nil {
+				if reporter != nil {
 					displayOut := result.Output
 					if len(displayOut) > 200 {
 						displayOut = displayOut[:200] + "...已截断"
 					}
-					repoter.OnToolResult(ctx, toolCall.Name, displayOut, result.IsError)
+					reporter.OnToolResult(ctx, toolCall.Name, displayOut, result.IsError)
 				}
 
 				// 安全写入对应索引
@@ -125,7 +119,6 @@ func (e *AgentEngine) Run(ctx context.Context, userPrompt string, repoter Report
 		}
 
 		wg.Wait() // 阻塞聚合
-		log.Println("[Engine] 所有并发工具执行完毕，开始聚合观察结果 (Observation)...")
 
 		// 按序追加回 Context
 		for _, obs := range observationMsgs {
