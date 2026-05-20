@@ -1,4 +1,3 @@
-// internal/engine/terminal_reporter.go
 package engine
 
 import (
