@@ -24,6 +24,33 @@ func NewSkillLoader(workDir string) *SkillLoader {
 	return &SkillLoader{workDir: workDir}
 }
 
+// LoadAllSkillName 扫描 .claw/skills 目录，返回所有 SKILL.md 中定义的技能名称列表
+func (s *SkillLoader) LoadAllSkillName() []string {
+	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
+
+	if _, err := os.Stat(skillBaseDir); os.IsNotExist(err) {
+		return nil
+	}
+
+	var names []string
+
+	filepath.WalkDir(skillBaseDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && d.Name() == "SKILL.md" {
+			content, err := os.ReadFile(path)
+			if err == nil {
+				skill := parseSkillMD(string(content))
+				names = append(names, skill.Name)
+			}
+		}
+		return nil
+	})
+
+	return names
+}
+
 // LoadAll 扫描 .claw/skills 目录，解析所有 SKILL.md，并格式化为字符串准备注入 Context
 func (s *SkillLoader) LoadAll() string {
 	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
