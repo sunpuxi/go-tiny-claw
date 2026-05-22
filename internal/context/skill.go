@@ -25,11 +25,11 @@ func NewSkillLoader(workDir string) *SkillLoader {
 }
 
 // LoadAllSkillName 扫描 .claw/skills 目录，返回所有 SKILL.md 中定义的技能名称列表
-func (s *SkillLoader) LoadAllSkillName() []string {
+func (s *SkillLoader) LoadAllSkillName() string {
 	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
 
 	if _, err := os.Stat(skillBaseDir); os.IsNotExist(err) {
-		return nil
+		return ""
 	}
 
 	var names []string
@@ -48,49 +48,43 @@ func (s *SkillLoader) LoadAllSkillName() []string {
 		return nil
 	})
 
-	return names
+	return "目前可供使用的Skill列表为：" + strings.Join(names, ",")
 }
 
-// LoadAll 扫描 .claw/skills 目录，解析所有 SKILL.md，并格式化为字符串准备注入 Context
-func (s *SkillLoader) LoadAll() string {
+// ReadSkill 按技能名称查找并解析对应的 SKILL.md 文件，返回完整的 Skill 结构
+func (s *SkillLoader) ReadSkill(name string) (Skill, error) {
 	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
 
-	// 如果目录不存在，说明当前工作区没有配置技能，静默返回
 	if _, err := os.Stat(skillBaseDir); os.IsNotExist(err) {
-		return ""
+		return Skill{}, fmt.Errorf("skills 目录不存在: %s", skillBaseDir)
 	}
 
-	var skillsBuilder strings.Builder
-	skillsBuilder.WriteString("\n### 可用专业技能 (Agent Skills)\n")
-	skillsBuilder.WriteString("以下是你拥有的标准化外挂技能，请在符合 description 描述的场景下严格遵循其正文指令：\n\n")
-
-	// 遍历查找 SKILL.md
+	var found Skill
 	err := filepath.WalkDir(skillBaseDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		// 仅处理名为 SKILL.md 的文件
 		if !d.IsDir() && d.Name() == "SKILL.md" {
-			content, err := os.ReadFile(path)
-			if err == nil {
-				skill := parseSkillMD(string(content))
-
-				// 将解析后的技能按结构注入
-				skillsBuilder.WriteString(fmt.Sprintf("#### 技能名称: %s\n", skill.Name))
-				skillsBuilder.WriteString(fmt.Sprintf("**触发条件**: %s\n\n", skill.Description))
-				skillsBuilder.WriteString("**执行指南**:\n")
-				skillsBuilder.WriteString(skill.Body)
-				skillsBuilder.WriteString("\n\n---\n")
+			content, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return nil // 跳过读取失败的文件
+			}
+			skill := parseSkillMD(string(content))
+			if skill.Name == name {
+				found = skill
+				return filepath.SkipAll // 找到后立即停止遍历
 			}
 		}
 		return nil
 	})
-
-	if err != nil || skillsBuilder.Len() < 100 {
-		return ""
+	if err != nil {
+		return Skill{}, fmt.Errorf("遍历 skills 目录失败: %w", err)
+	}
+	if found.Name == "" {
+		return Skill{}, fmt.Errorf("未找到名称为 '%s' 的技能", name)
 	}
 
-	return skillsBuilder.String()
+	return found, nil
 }
 
 // parseSkillMD 极简解析带有 YAML Frontmatter 的 Markdown 内容

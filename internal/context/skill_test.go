@@ -3,71 +3,23 @@ package context
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"strings"
 	"testing"
 )
 
 func TestLoadAllSkillName(t *testing.T) {
-	// 创建临时目录
 	tmpDir := t.TempDir()
-
-	// 创建 .claw/skills 目录结构
 	skillsDir := filepath.Join(tmpDir, ".claw", "skills")
-	err := os.MkdirAll(skillsDir, 0755)
-	if err != nil {
-		t.Fatal(err)
-	}
+	setupSkillFile(t, skillsDir, "git-workflow", "git-workflow", "Git 工作流规范")
+	setupSkillFile(t, skillsDir, "code-review", "code-review", "代码审查流程")
+	setupSkillFile(t, skillsDir, "deploy", "deploy", "部署流程")
 
-	// 创建 SKILL.md 文件
-	skillFiles := map[string]string{
-		filepath.Join(skillsDir, "git-workflow", "SKILL.md"): `---
-name: git-workflow
-description: Git 工作流规范
----
-# Git Workflow
-执行前请先拉取最新代码
-`,
-		filepath.Join(skillsDir, "code-review", "SKILL.md"): `---
-name: code-review
-description: 代码审查流程
----
-# Code Review
-检查代码风格和测试覆盖
-`,
-		filepath.Join(skillsDir, "deploy", "SKILL.md"): `---
-name: deploy
-description: 部署流程
----
-# Deploy
-执行构建和发布
-`,
-	}
-
-	for path, content := range skillFiles {
-		dir := filepath.Dir(path)
-		err := os.MkdirAll(dir, 0755)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = os.WriteFile(path, []byte(content), 0644)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// 执行测试
 	loader := NewSkillLoader(tmpDir)
-	names := loader.LoadAllSkillName()
+	result := loader.LoadAllSkillName()
 
-	// 验证结果
-	sort.Strings(names)
-	expected := []string{"code-review", "deploy", "git-workflow"}
-	if len(names) != len(expected) {
-		t.Fatalf("期望 %d 个技能名，实际得到 %d: %v", len(expected), len(names), names)
-	}
-	for i, name := range expected {
-		if names[i] != name {
-			t.Errorf("索引 %d: 期望 %q, 实际 %q", i, name, names[i])
+	for _, name := range []string{"git-workflow", "code-review", "deploy"} {
+		if !strings.Contains(result, name) {
+			t.Errorf("结果中应包含 %q，实际: %s", name, result)
 		}
 	}
 }
@@ -75,10 +27,10 @@ description: 部署流程
 func TestLoadAllSkillName_DirNotExist(t *testing.T) {
 	tmpDir := t.TempDir()
 	loader := NewSkillLoader(tmpDir)
-	names := loader.LoadAllSkillName()
+	result := loader.LoadAllSkillName()
 
-	if names != nil {
-		t.Errorf("目录不存在时应返回 nil，实际得到: %v", names)
+	if result != "" {
+		t.Errorf("目录不存在时应返回空字符串，实际得到: %q", result)
 	}
 }
 
@@ -90,17 +42,16 @@ func TestLoadAllSkillName_NoSkillFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 在 skills 目录下放一个无关的文件，确保不被误解析
 	err = os.WriteFile(filepath.Join(skillsDir, "readme.txt"), []byte("hello"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	loader := NewSkillLoader(tmpDir)
-	names := loader.LoadAllSkillName()
+	result := loader.LoadAllSkillName()
 
-	if len(names) != 0 {
-		t.Errorf("没有 SKILL.md 时应返回空切片，实际得到: %v", names)
+	if result != "目前可供使用的Skill列表为：" {
+		t.Errorf("没有 SKILL.md 时应返回只有前缀的空列表，实际: %q", result)
 	}
 }
 
@@ -112,16 +63,76 @@ func TestLoadAllSkillName_NoFrontmatter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// SKILL.md 没有 frontmatter，应返回默认名称 "Unknown Skill"
 	err = os.WriteFile(skillPath, []byte("# Just a title\nsome content"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	loader := NewSkillLoader(tmpDir)
-	names := loader.LoadAllSkillName()
+	result := loader.LoadAllSkillName()
 
-	if len(names) != 1 || names[0] != "Unknown Skill" {
-		t.Errorf("无 frontmatter 应返回 'Unknown Skill'，实际得到: %v", names)
+	if !strings.Contains(result, "Unknown Skill") {
+		t.Errorf("无 frontmatter 应包含 'Unknown Skill'，实际: %q", result)
+	}
+}
+
+func TestReadSkill_Found(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillsDir := filepath.Join(tmpDir, ".claw", "skills")
+	setupSkillFile(t, skillsDir, "git-workflow", "git-workflow", "Git 工作流规范")
+
+	loader := NewSkillLoader(tmpDir)
+	skill, err := loader.ReadSkill("git-workflow")
+	if err != nil {
+		t.Fatalf("ReadSkill 执行失败: %v", err)
+	}
+
+	if skill.Name != "git-workflow" {
+		t.Errorf("期望 name = 'git-workflow'，实际: %q", skill.Name)
+	}
+	if skill.Description != "Git 工作流规范" {
+		t.Errorf("期望 description = 'Git 工作流规范'，实际: %q", skill.Description)
+	}
+	if !strings.Contains(skill.Body, "执行前请先拉取最新代码") {
+		t.Errorf("Body 应包含 skill 正文，实际: %s", skill.Body)
+	}
+}
+
+func TestReadSkill_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillsDir := filepath.Join(tmpDir, ".claw", "skills")
+	setupSkillFile(t, skillsDir, "git-workflow", "git-workflow", "Git 工作流规范")
+
+	loader := NewSkillLoader(tmpDir)
+	_, err := loader.ReadSkill("non-existent-skill")
+	if err == nil {
+		t.Fatal("应返回错误，实际为 nil")
+	}
+	if !strings.Contains(err.Error(), "未找到") {
+		t.Errorf("错误信息应包含'未找到'，实际: %v", err)
+	}
+}
+
+func TestReadSkill_DirNotExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	loader := NewSkillLoader(tmpDir)
+	_, err := loader.ReadSkill("anything")
+	if err == nil {
+		t.Fatal("目录不存在时应返回错误，实际为 nil")
+	}
+}
+
+// setupSkillFile 创建技能目录和 SKILL.md 文件的辅助函数
+func setupSkillFile(t *testing.T, baseDir, dirName, name, description string) {
+	t.Helper()
+	skillPath := filepath.Join(baseDir, dirName, "SKILL.md")
+	err := os.MkdirAll(filepath.Dir(skillPath), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "---\nname: " + name + "\ndescription: " + description + "\n---\n# " + name + "\n执行前请先拉取最新代码\n"
+	err = os.WriteFile(skillPath, []byte(content), 0644)
+	if err != nil {
+		t.Fatal(err)
 	}
 }

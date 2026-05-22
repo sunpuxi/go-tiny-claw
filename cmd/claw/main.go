@@ -33,12 +33,13 @@ func main() {
 	workDir += "/workspace"
 	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
 
-	// 挂载 4 大基础工具
+	// 挂载基础工具
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
+	registry.Register(tools.NewReadSkillTool(workDir))
 
 	// 实例化引擎并开启计划模式 (PlanMode=true)
 	eng := engine.NewAgentEngine(llmProvider, registry, false, true)

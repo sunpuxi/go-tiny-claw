@@ -29,7 +29,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking, pl
 		EnableThinking: enableThinking,
 		PlanMode:       planMode,
 		composer:       ctxpkg.NewPromptComposer(".", planMode),
-		compactor:      ctxpkg.NewCompactor(3000, 6),
+		compactor:      ctxpkg.NewCompactor(100000, 6),
 	}
 }
 

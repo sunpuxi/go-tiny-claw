@@ -77,7 +77,7 @@ func (c *PromptComposer) Build() schema.Message {
 	}
 
 	// 4. 动态加载技能外挂 (Skills)
-	skillsContent := c.skillLoader.LoadAll()
+	skillsContent := c.skillLoader.LoadAllSkillName()
 	if skillsContent != "" {
 		promptBuilder.WriteString(skillsContent)
 	}
