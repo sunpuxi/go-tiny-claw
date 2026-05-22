@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Skill 定义了从 SKILL.md 中解析出的标准化技能结构
@@ -17,11 +18,16 @@ type Skill struct {
 
 // SkillLoader 负责从本地文件系统中加载并解析符合规范的技能模板
 type SkillLoader struct {
-	workDir string
+	workDir       string
+	skillCacheMap map[string]Skill
+	mu            sync.RWMutex
 }
 
 func NewSkillLoader(workDir string) *SkillLoader {
-	return &SkillLoader{workDir: workDir}
+	return &SkillLoader{
+		workDir:       workDir,
+		skillCacheMap: make(map[string]Skill),
+	}
 }
 
 // LoadAllSkillName 扫描 .claw/skills 目录，返回所有 SKILL.md 中定义的技能名称列表
@@ -52,9 +58,27 @@ func (s *SkillLoader) LoadAllSkillName() string {
 }
 
 // ReadSkill 按技能名称查找并解析对应的 SKILL.md 文件，返回完整的 Skill 结构
+// 使用 double-checked locking 模式：先读缓存（RLock），未命中则升级为写锁（Lock）再扫描文件系统
 func (s *SkillLoader) ReadSkill(name string) (Skill, error) {
-	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
+	// 1. 读锁检查缓存（允许并发读）
+	s.mu.RLock()
+	if skill, ok := s.skillCacheMap[name]; ok {
+		s.mu.RUnlock()
+		return skill, nil
+	}
+	s.mu.RUnlock()
 
+	// 2. 缓存未命中，获取写锁进行文件扫描
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 3. Double-check：在获取到写锁后再次检查，防止其他 goroutine 已加载
+	if skill, ok := s.skillCacheMap[name]; ok {
+		return skill, nil
+	}
+
+	// 4. 遍历 .claw/skills 查找匹配的 SKILL.md
+	skillBaseDir := filepath.Join(s.workDir, ".claw", "skills")
 	if _, err := os.Stat(skillBaseDir); os.IsNotExist(err) {
 		return Skill{}, fmt.Errorf("skills 目录不存在: %s", skillBaseDir)
 	}
@@ -72,7 +96,8 @@ func (s *SkillLoader) ReadSkill(name string) (Skill, error) {
 			skill := parseSkillMD(string(content))
 			if skill.Name == name {
 				found = skill
-				return filepath.SkipAll // 找到后立即停止遍历
+				s.skillCacheMap[name] = found // 写锁已持有，直接写入缓存
+				return filepath.SkipAll
 			}
 		}
 		return nil
@@ -80,6 +105,7 @@ func (s *SkillLoader) ReadSkill(name string) (Skill, error) {
 	if err != nil {
 		return Skill{}, fmt.Errorf("遍历 skills 目录失败: %w", err)
 	}
+
 	if found.Name == "" {
 		return Skill{}, fmt.Errorf("未找到名称为 '%s' 的技能", name)
 	}
