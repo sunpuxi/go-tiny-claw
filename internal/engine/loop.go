@@ -1,4 +1,3 @@
-// internal/engine/loop.go
 package engine
 
 import (
@@ -37,37 +36,30 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking boo
 func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter Reporter) error {
 	log.Printf("[Engine] 唤醒会话 [%s]，锁定工作区: %s (PlanMode: %v)\n", session.ID, session.WorkDir, e.PlanMode)
 
+	// 全局的Prompt加载
 	composer := ctxpkg.NewPromptComposer(session.WorkDir, e.PlanMode)
+	// 构建提示词，并读取所有的项目中的skill，仅提供skill名称
 	systemMsg := composer.Build()
 
 	for {
+		// 加载所有的工具列表
 		availableTools := e.registry.GetAvailableTools()
+		// 获取短期的工作记忆
 		workingMemory := session.GetWorkingMemory(20)
-
+		// 拼接进历史的会话记录中
 		var contextHistory []schema.Message
 		contextHistory = append(contextHistory, systemMsg)
 		contextHistory = append(contextHistory, workingMemory...)
+		// 压缩信息（函数内部自行决断是否压缩，此处只需要显示的调用一下即可）
 		compactedContext := e.compactor.Compact(contextHistory)
 
-		var currentTurnThinkingContent string
-
-		// ================= Phase 1: Thinking =================
-		if e.EnableThinking {
-			if reporter != nil {
-				reporter.OnThinking(ctx)
-			}
-
-			thinkResp, err := e.provider.Generate(ctx, compactedContext, nil)
-			if err != nil {
-				return fmt.Errorf("Thinking 阶段失败: %w", err)
-			}
-			if thinkResp.Content != "" {
-				currentTurnThinkingContent = thinkResp.Content
-				compactedContext = append(compactedContext, *thinkResp)
-			}
+		// 深度思考模式
+		currentTurnThinkingContent, compactedContext, err := e.think(ctx, compactedContext, reporter)
+		if err != nil {
+			return err
 		}
 
-		// ================= Phase 2: Action =================
+		// 深度思考模式之后，挂载工具列表，开始后续的任务执行
 		actionResp, err := e.provider.Generate(ctx, compactedContext, availableTools)
 		if err != nil {
 			return fmt.Errorf("Action 阶段失败: %w", err)
@@ -85,57 +77,89 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 			reporter.OnMessage(ctx, actionResp.Content)
 		}
 
+		// 如果没有工具调用，则ReAct循环结束，认为当前的会话已经结束
 		if len(actionResp.ToolCalls) == 0 {
 			break
 		}
 
-		// ================= 执行工具并注入自愈模板 =================
-		observationMsgs := make([]schema.Message, len(actionResp.ToolCalls))
-		var wg sync.WaitGroup
-
-		for i, toolCall := range actionResp.ToolCalls {
-			wg.Add(1)
-
-			go func(idx int, call schema.ToolCall) {
-				defer wg.Done()
-
-				if reporter != nil {
-					reporter.OnToolCall(ctx, call.Name, string(call.Arguments))
-				}
-
-				// 底层物理执行工具
-				result := e.registry.Execute(ctx, call)
-
-				// 【核心拦截与注入】
-				finalOutput := result.Output
-				if result.IsError {
-					// 发生错误，交由 RecoveryManager 诊断并注入“锦囊妙计”
-					finalOutput = e.recovery.AnalyzeAndInject(call.Name, result.Output)
-					log.Printf("  -> [Go-%d] ❌ 注入救援指南: %s\n", idx, finalOutput)
-				} else {
-					log.Printf("  -> [Go-%d] ✅ 工具执行成功 (返回 %d 字节)\n", idx, len(result.Output))
-				}
-
-				if reporter != nil {
-					displayOutput := finalOutput
-					if len(displayOutput) > 200 {
-						displayOutput = displayOutput[:200] + "... (已截断)"
-					}
-					reporter.OnToolResult(ctx, call.Name, displayOutput, result.IsError)
-				}
-
-				// 将注入过 Recovery Hint 的最终结果写入上下文历史
-				observationMsgs[idx] = schema.Message{
-					Role:       schema.RoleUser,
-					Content:    finalOutput,
-					ToolCallID: call.ID,
-				}
-			}(i, toolCall)
-		}
-
-		wg.Wait()
+		// 并发执行所有工具调用
+		observationMsgs := e.executeTools(ctx, actionResp.ToolCalls, reporter)
 		session.Append(observationMsgs...)
 	}
 
 	return nil
+}
+
+// think 执行深度思考阶段：不挂载工具列表，强制LLM先进行规划
+func (e *AgentEngine) think(ctx context.Context, compactedContext []schema.Message, reporter Reporter) (string, []schema.Message, error) {
+	if !e.EnableThinking {
+		return "", compactedContext, nil
+	}
+
+	if reporter != nil {
+		reporter.OnThinking(ctx)
+	}
+
+	// 调用LLM，不传入工具列表，强制模型先思考规划
+	thinkResp, err := e.provider.Generate(ctx, compactedContext, nil)
+	if err != nil {
+		return "", nil, fmt.Errorf("Thinking 阶段失败: %w", err)
+	}
+
+	// 当前思考的结果信息，拼接进历史会话中
+	currentTurnThinkingContent := ""
+	if thinkResp.Content != "" {
+		currentTurnThinkingContent = thinkResp.Content
+		compactedContext = append(compactedContext, *thinkResp)
+	}
+
+	return currentTurnThinkingContent, compactedContext, nil
+}
+
+// executeTools 并发执行模型返回的所有工具调用，返回每个工具的执行结果消息
+func (e *AgentEngine) executeTools(ctx context.Context, toolCalls []schema.ToolCall, reporter Reporter) []schema.Message {
+	observationMsgs := make([]schema.Message, len(toolCalls))
+	var wg sync.WaitGroup
+
+	for i, toolCall := range toolCalls {
+		wg.Add(1)
+
+		go func(idx int, call schema.ToolCall) {
+			defer wg.Done()
+
+			if reporter != nil {
+				reporter.OnToolCall(ctx, call.Name, string(call.Arguments))
+			}
+
+			// 底层物理执行工具
+			result := e.registry.Execute(ctx, call)
+
+			// 核心拦截与注入：如果工具执行报错，注入恢复建议
+			finalOutput := result.Output
+			if result.IsError {
+				finalOutput = e.recovery.AnalyzeAndInject(call.Name, result.Output)
+				log.Printf("  -> [Go-%d] ❌ 注入救援指南: %s\n", idx, finalOutput)
+			} else {
+				log.Printf("  -> [Go-%d] ✅ 工具执行成功 (返回 %d 字节)\n", idx, len(result.Output))
+			}
+
+			if reporter != nil {
+				displayOutput := finalOutput
+				if len(displayOutput) > 200 {
+					displayOutput = displayOutput[:200] + "... (已截断)"
+				}
+				reporter.OnToolResult(ctx, call.Name, displayOutput, result.IsError)
+			}
+
+			// 将最终结果写入上下文历史
+			observationMsgs[idx] = schema.Message{
+				Role:       schema.RoleUser,
+				Content:    finalOutput,
+				ToolCallID: call.ID,
+			}
+		}(i, toolCall)
+	}
+
+	wg.Wait()
+	return observationMsgs
 }

@@ -38,18 +38,7 @@ func main() {
 	// 这是一个巨大的陷阱指令：
 	// 我们不给它查看文件的机会，直接命令它凭初始上下文去修改文件，目的是诱发 old_text 不匹配的错误。
 	prompt := `
-    我当前目录下有一个 auth.go 文件。
-    请修改 auth.go 中的 login 函数。
-    请直接使用 edit_file 工具替换下面的代码块，将判断条件改为同时允许"admin"、"root"和"guest"三种用户登录：
-
-    // 鉴权入口函数
-    func login(user string) bool {
-        // 检查用户名
-        if user == "admin" {
-            return true
-        }
-        return false
-    }
+    阅读当前项目，用一句话总结这个项目实现了什么功能
 `
 	log.Println("\n>>> 🚀 启动自愈测试任务...")
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
