@@ -27,6 +27,7 @@ func main() {
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
+	registry.Register(tools.NewReadSkillTool(workDir))
 
 	// 关闭 Plan 模式，专注于见证它改变主意的单点纠偏过程
 	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
