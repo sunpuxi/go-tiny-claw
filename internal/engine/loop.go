@@ -88,7 +88,10 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 		observationMsgs, lastToolCall, lastToolResult := e.executeTools(ctx, actionResp.ToolCalls, reporter)
 
 		// 死循环检测与消息注入
-		e.injector.CheckAndInject(lastToolCall, lastToolResult)
+		resultMessage := e.injector.CheckAndInject(lastToolCall, lastToolResult)
+		if resultMessage != nil {
+			observationMsgs = append(observationMsgs, *resultMessage)
+		}
 
 		// 追加上下文
 		session.Append(observationMsgs...)
