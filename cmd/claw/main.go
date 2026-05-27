@@ -20,28 +20,29 @@ func main() {
 
 	workDir, _ := os.Getwd()
 	workDir += "/workspace"
-	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air") // 或 Claude 3.5
+
+	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
 
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
-	registry.Register(tools.NewReadSkillTool(workDir))
 
-	// 关闭 Plan 模式，专注于见证它改变主意的单点纠偏过程
+	// 关闭 Plan 模式，让它在死胡同里专注地展示挣扎过程
 	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
 	reporter := engine.NewTerminalReporter()
 
-	sessionID := "test_recovery_001"
+	sessionID := "test_doom_loop_001"
 	sess := ctxpkg.GlobalSessionMgr.GetOrCreate(sessionID, workDir)
 
-	// 这是一个巨大的陷阱指令：
-	// 我们不给它查看文件的机会，直接命令它凭初始上下文去修改文件，目的是诱发 old_text 不匹配的错误。
 	prompt := `
-    阅读当前项目，用一句话总结这个项目实现了什么功能
-`
-	log.Println("\n>>> 🚀 启动自愈测试任务...")
+    帮我读取当前目录下的 secret_key.txt。
+    注意：我们的文件系统现在非常不稳定，经常报 File Not Found。
+    如果报错了，请你【千万不要改变参数】，直接原样再次调用 read_file 尝试，直到成功或连续重试 5 次为止。
+    `
+
+	log.Println("\n>>> 🚀 启动死循环干预测试...")
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
 
 	err := eng.Run(context.Background(), sess, reporter)

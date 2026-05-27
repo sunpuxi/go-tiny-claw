@@ -20,6 +20,7 @@ type AgentEngine struct {
 	PlanMode       bool
 	compactor      *ctxpkg.Compactor
 	recovery       *ctxpkg.RecoveryManager // 【新增】自愈管理器
+	injector       *ReminderInjector
 }
 
 func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking bool, planMode bool) *AgentEngine {
@@ -30,6 +31,7 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking boo
 		PlanMode:       planMode,
 		compactor:      ctxpkg.NewCompactor(20000, 6),
 		recovery:       ctxpkg.NewRecoveryManager(), // 初始化 Recovery
+		injector:       NewReminderInjector(),       // 初始化死循环注入处理器
 	}
 }
 
@@ -65,7 +67,7 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 			return fmt.Errorf("Action 阶段失败: %w", err)
 		}
 
-		// (上一讲修复 1214 的关键代码：合并为合法的单条 Assistant 消息)
+		// (合并为合法的单条 Assistant 消息)
 		finalAssistantMsg := schema.Message{
 			Role:      schema.RoleAssistant,
 			Content:   strings.TrimSpace(currentTurnThinkingContent + "\n" + actionResp.Content),
@@ -83,7 +85,12 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 		}
 
 		// 并发执行所有工具调用
-		observationMsgs := e.executeTools(ctx, actionResp.ToolCalls, reporter)
+		observationMsgs, lastToolCall, lastToolResult := e.executeTools(ctx, actionResp.ToolCalls, reporter)
+
+		// 死循环检测与消息注入
+		e.injector.CheckAndInject(lastToolCall, lastToolResult)
+
+		// 追加上下文
 		session.Append(observationMsgs...)
 	}
 
@@ -117,8 +124,11 @@ func (e *AgentEngine) think(ctx context.Context, compactedContext []schema.Messa
 }
 
 // executeTools 并发执行模型返回的所有工具调用，返回每个工具的执行结果消息
-func (e *AgentEngine) executeTools(ctx context.Context, toolCalls []schema.ToolCall, reporter Reporter) []schema.Message {
+func (e *AgentEngine) executeTools(ctx context.Context, toolCalls []schema.ToolCall, reporter Reporter) ([]schema.Message, schema.ToolCall, schema.ToolResult) {
 	observationMsgs := make([]schema.Message, len(toolCalls))
+	var lastToolCall schema.ToolCall
+	var lastToolResult schema.ToolResult
+
 	var wg sync.WaitGroup
 
 	for i, toolCall := range toolCalls {
@@ -157,9 +167,15 @@ func (e *AgentEngine) executeTools(ctx context.Context, toolCalls []schema.ToolC
 				Content:    finalOutput,
 				ToolCallID: call.ID,
 			}
+
+			// 最后一次的工具执行的结果
+			if i == 0 {
+				lastToolCall = toolCall
+				lastToolResult = result
+			}
 		}(i, toolCall)
 	}
 
 	wg.Wait()
-	return observationMsgs
+	return observationMsgs, lastToolCall, lastToolResult
 }
