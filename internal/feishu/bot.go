@@ -5,12 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
+	"github.com/larksuite/oapi-sdk-go/v3/ws"
+	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"log"
 	"os"
 	"strings"
 
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
+	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -22,9 +26,11 @@ type FeishuBot struct {
 	appID     string
 	appSecret string
 	engine    *engine.AgentEngine // 持有核心引擎引用
+	sess      *ctxpkg.Session
+	r         *FeishuReporter
 }
 
-func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
+func NewFeishuBot(eng *engine.AgentEngine, sess *ctxpkg.Session) *FeishuBot {
 	appID := os.Getenv("FEISHU_APP_ID")
 	appSecret := os.Getenv("FEISHU_APP_SECRET")
 
@@ -40,7 +46,31 @@ func NewFeishuBot(eng *engine.AgentEngine) *FeishuBot {
 		appID:     appID,
 		appSecret: appSecret,
 		engine:    eng,
+		sess:      sess,
 	}
+}
+
+// StartWebSocket 启动 WebSocket 长连接方式接收飞书事件（推荐方式）
+// 优势：无需公网 IP、无需配置回调 URL、自动重连、部署简单
+func (b *FeishuBot) StartWebSocket(ctx context.Context) error {
+	log.Println("🔌 正在启动 WebSocket 长连接模式...")
+
+	// 创建事件处理器（长连接模式下 verifyToken 和 encryptKey 可以为空）
+	eventHandler := b.GetEventDispatcher()
+
+	// 创建 WebSocket 客户端
+	wsClient := ws.NewClient(
+		b.appID,
+		b.appSecret,
+		ws.WithEventHandler(eventHandler),
+		ws.WithLogLevel(larkcore.LogLevelInfo),
+		ws.WithAutoReconnect(true), // 自动重连
+	)
+
+	log.Println("✅ WebSocket 客户端已创建，正在连接飞书服务器...")
+
+	// 启动长连接（阻塞式调用，会一直运行直到连接断开或 context 取消）
+	return wsClient.Start(ctx)
 }
 
 // GetEventDispatcher 用于注册到 HTTP 服务器，处理来自飞书的 POST 事件
@@ -59,6 +89,24 @@ func (b *FeishuBot) GetEventDispatcher() *dispatcher.EventDispatcher {
 
 			chatId := *event.Event.Message.ChatId
 			log.Printf("[Feishu] 收到会话 %s 消息: %s\n", chatId, contentStr)
+
+			// 【新增】：拦截人工审批的特殊口令
+			if strings.HasPrefix(contentStr, "approve ") {
+				taskID := strings.TrimPrefix(contentStr, "approve ")
+				taskID = strings.TrimSpace(taskID)
+				// 唤醒挂起的引擎协程！
+				GlobalApprovalMgr.ResolveApproval(taskID, true, "人类管理员已批准操作")
+				log.Printf("[Feishu] 会话 %s: ✅ 已为您批准任务 %s", chatId, taskID)
+				return nil
+			}
+
+			if strings.HasPrefix(contentStr, "reject ") {
+				taskID := strings.TrimPrefix(contentStr, "reject ")
+				taskID = strings.TrimSpace(taskID) // 唤醒挂起的引擎协程，并反馈拒绝理由！
+				GlobalApprovalMgr.ResolveApproval(taskID, false, "人类管理员认为该操作存在极高风险，已无情拒绝")
+				log.Printf("[Feishu] 会话 %s: 🚫 已拒绝任务 %s", chatId, taskID)
+				return nil
+			}
 
 			// 【驾驭并发】：收到消息后，绝不能阻塞 HTTP 回调。
 			// 我们要为每个请求开启一个独立的 Goroutine 跑 Agent 任务！
@@ -82,20 +130,25 @@ func (b *FeishuBot) handleAgentRun(chatId string, prompt string) {
 		chatId: chatId,
 	}
 
+	// 添加prompt
+	b.sess.Append(schema.Message{
+		Content: prompt,
+		Role:    schema.RoleUser,
+	})
+
 	// 启动引擎！
-	err := b.engine.Run(context.Background(), prompt, reporter)
+	err := b.engine.Run(context.Background(), b.sess, reporter)
 	if err != nil {
 		reporter.sendMsg(fmt.Sprintf("❌ Agent 运行崩溃: %v", err))
 	}
 }
 
-// ==========================================
-// FeishuReporter: 将引擎的输出格式化后发给飞书
-// ==========================================
 type FeishuReporter struct {
 	client *lark.Client
 	chatId string
 }
+
+func (b *FeishuBot) Reporter() *FeishuReporter { return b.r }
 
 // sendMsg 封装了调用飞书 OpenAPI 发送卡片/文本的操作
 func (r *FeishuReporter) sendMsg(text string) {

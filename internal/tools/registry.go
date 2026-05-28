@@ -30,12 +30,16 @@ type BaseTool interface {
 	Execute(ctx context.Context, args json.RawMessage) (string, error)
 }
 
-// internal/tools/registry.go (续)
+// MiddlewareFunc 是工具执行前后进行拦截的中间件函数
+type MiddlewareFunc func(ctx context.Context, call schema.ToolCall) (allowed bool, rejectReason string)
 
 // Registry 定义了工具的注册与分发接口
 type Registry interface {
 	// Register 挂载一个新的工具到系统中
 	Register(tool BaseTool)
+
+	// Use 挂载一个中间件到系统中
+	Use(middleware MiddlewareFunc)
 
 	// GetAvailableTools 返回当前系统挂载的所有工具的 Schema，供 Main Loop 交给 Provider
 	GetAvailableTools() []schema.ToolDefinition
@@ -48,11 +52,13 @@ type Registry interface {
 type registryImpl struct {
 	// 使用 map 以工具的 Name 作为 Key 进行快速 O(1) 路由查找
 	tools map[string]BaseTool
+	mw    []MiddlewareFunc
 }
 
 func NewRegistry() Registry {
 	return &registryImpl{
 		tools: make(map[string]BaseTool),
+		mw:    make([]MiddlewareFunc, 0),
 	}
 }
 
@@ -63,6 +69,10 @@ func (r *registryImpl) Register(tool BaseTool) {
 	}
 	r.tools[name] = tool
 	log.Printf("[Registry] 成功挂载工具: %s\n", name)
+}
+
+func (r *registryImpl) Use(middleware MiddlewareFunc) {
+	r.mw = append(r.mw, middleware)
 }
 
 func (r *registryImpl) GetAvailableTools() []schema.ToolDefinition {
@@ -82,6 +92,19 @@ func (r *registryImpl) Execute(ctx context.Context, call schema.ToolCall) schema
 			ToolCallID: call.ID,
 			Output:     errMsg,
 			IsError:    true, // 标记为错误，模型看到后会尝试纠正
+		}
+	}
+
+	// 工具执行之前的审核(返回拒绝原因，强制LLM阅读并纠错)
+	for _, mw := range r.mw {
+		allowed, reason := mw(ctx, call)
+		if !allowed {
+			log.Printf("[Registry] ⚠️ 工具 %s 被 Middleware 拦截: %s\n", call.Name, reason)
+			return schema.ToolResult{
+				ToolCallID: call.ID,
+				Output:     fmt.Sprintf("工具执行请求被拦截，原因: %s", reason),
+				IsError:    true,
+			}
 		}
 	}
 
