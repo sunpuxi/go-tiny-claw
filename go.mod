@@ -6,6 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.40.0
 	github.com/larksuite/oapi-sdk-go/v3 v3.6.1
 	github.com/openai/openai-go/v3 v3.34.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -21,5 +22,4 @@ require (
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	golang.org/x/sync v0.16.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

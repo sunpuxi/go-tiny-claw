@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
+	"github.com/sunpuxi/go-tiny-claw/config"
 	"github.com/sunpuxi/go-tiny-claw/internal/feishu"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
@@ -30,6 +32,11 @@ func main() {
 	workDir += "/workspace"
 
 	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
+
+	// 初始化危险命令配置，启动时加载 config.yaml，每 5s 热加载
+	dc := config.InitDangerConfig("config/config.yaml")
+	dc.StartWatching(5 * time.Second)
+	defer dc.Stop()
 
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewReadFileTool(workDir))
@@ -72,17 +79,24 @@ func main() {
 	http.HandleFunc("/webhook/event", func(w http.ResponseWriter, r *http.Request) {
 		// 飞书验证回调地址时会 POST 一个 JSON：{"challenge":"xxx"}
 		// 需要原样返回 challenge 才能通过校验
-		body, _ := io.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		r.Body.Close()
+		if err != nil {
+			log.Printf("[Feishu] 读取请求体失败: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
 
 		var req map[string]interface{}
 		if err := json.Unmarshal(body, &req); err == nil {
 			if ch, ok := req["challenge"]; ok {
 				log.Println("[Feishu] 响应 Challenge 校验")
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				if err := json.NewEncoder(w).Encode(map[string]interface{}{
 					"challenge": ch,
-				})
+				}); err != nil {
+					log.Printf("[Feishu] 编码 Challenge 响应失败: %v", err)
+				}
 				return
 			}
 		}
