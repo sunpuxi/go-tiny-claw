@@ -10,4 +10,3 @@ patterns:
   - 'chmod\s+777'
   - 'dd\s+if='
   - ':(){ :\|:& };:'
-  - '\bls\b'

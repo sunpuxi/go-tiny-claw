@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  claw:
+    build: .
+    container_name: go-tiny-claw
+    ports:
+      - "48080:48080"
+    environment:
+      - ZHIPU_API_KEY=${ZHIPU_API_KEY}
+      - FEISHU_APP_ID=${FEISHU_APP_ID}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET}
+      # 以下两个按需配置
+      # - FEISHU_ENCRYPT_KEY=${FEISHU_ENCRYPT_KEY}
+      # - FEISHU_VERIFY_TOKEN=${FEISHU_VERIFY_TOKEN}
+    volumes:
+      # config.yaml 以 volume 挂载，修改宿主机文件即可热加载
+      - ./config/config.yaml:/app/config/config.yaml
+      # workspace 持久化到宿主机
+      - ./workspace:/app/workspace
+    restart: unless-stopped

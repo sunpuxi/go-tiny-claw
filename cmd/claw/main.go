@@ -32,19 +32,30 @@ func main() {
 	workDir += "/workspace"
 
 	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
+	reporter := engine.NewTerminalReporter()
 
 	// 初始化危险命令配置，启动时加载 config.yaml，每 5s 热加载
 	dc := config.InitDangerConfig("config/config.yaml")
 	dc.StartWatching(5 * time.Second)
 	defer dc.Stop()
 
+	// 【防御沙箱】为子智能体准备受限的只读注册表
+	readOnlyRegistry := tools.NewRegistry()
+	readOnlyRegistry.Register(tools.NewReadFileTool(workDir))
+	readOnlyRegistry.Register(tools.NewBashTool(workDir)) // 允许简单的 grep 等搜索操作
+
+	// 主 Agent 的工具箱
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
 
+	// 引擎实现
 	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
+
+	// 绑定 subAgent工具
+	registry.Register(tools.NewSubagentTool(eng, readOnlyRegistry, reporter))
 
 	// 假设一个bot绑定一个session
 	sessionID := "test_command_intercept_001"
