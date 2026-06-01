@@ -30,16 +30,23 @@ type BaseTool interface {
 	Execute(ctx context.Context, args json.RawMessage) (string, error)
 }
 
-// MiddlewareFunc 是工具执行前后进行拦截的中间件函数
+// MiddlewareFunc 是工具执行前后进行拦截的中间件函数（前置门禁）
 type MiddlewareFunc func(ctx context.Context, call schema.ToolCall) (allowed bool, rejectReason string)
+
+// AroundFunc 是环绕工具执行的中间件函数，采用洋葱圈模型
+// next 是下一层中间件（或最终的工具执行逻辑），返回工具的原始输出和错误
+type AroundFunc func(ctx context.Context, call schema.ToolCall, next func() (string, error)) (string, error)
 
 // Registry 定义了工具的注册与分发接口
 type Registry interface {
 	// Register 挂载一个新的工具到系统中
 	Register(tool BaseTool)
 
-	// Use 挂载一个中间件到系统中
+	// Use 挂载一个前置门禁中间件到系统中
 	Use(middleware MiddlewareFunc)
+
+	// UseAround 挂载一个环绕中间件到系统中（洋葱圈模型，先注册的最外层）
+	UseAround(around AroundFunc)
 
 	// GetAvailableTools 返回当前系统挂载的所有工具的 Schema，供 Main Loop 交给 Provider
 	GetAvailableTools() []schema.ToolDefinition
@@ -51,14 +58,16 @@ type Registry interface {
 // registryImpl 是 Registry 接口的默认实现
 type registryImpl struct {
 	// 使用 map 以工具的 Name 作为 Key 进行快速 O(1) 路由查找
-	tools map[string]BaseTool
-	mw    []MiddlewareFunc
+	tools  map[string]BaseTool
+	mw     []MiddlewareFunc
+	around []AroundFunc
 }
 
 func NewRegistry() Registry {
 	return &registryImpl{
-		tools: make(map[string]BaseTool),
-		mw:    make([]MiddlewareFunc, 0),
+		tools:  make(map[string]BaseTool),
+		mw:     make([]MiddlewareFunc, 0),
+		around: make([]AroundFunc, 0),
 	}
 }
 
@@ -73,6 +82,10 @@ func (r *registryImpl) Register(tool BaseTool) {
 
 func (r *registryImpl) Use(middleware MiddlewareFunc) {
 	r.mw = append(r.mw, middleware)
+}
+
+func (r *registryImpl) UseAround(around AroundFunc) {
+	r.around = append(r.around, around)
 }
 
 func (r *registryImpl) GetAvailableTools() []schema.ToolDefinition {
@@ -108,8 +121,21 @@ func (r *registryImpl) Execute(ctx context.Context, call schema.ToolCall) schema
 		}
 	}
 
-	// 2. 执行工具逻辑：将原始的 JSON 字节流直接丢给具体工具
-	output, err := tool.Execute(ctx, call.Arguments)
+	// 2. 构建执行链：around 中间件洋葱圈 + 底层工具执行
+	// 最内层是工具的实际执行逻辑
+	core := func() (string, error) {
+		return tool.Execute(ctx, call.Arguments)
+	}
+
+	// 倒序包裹，确保先注册的 around 中间件在最外层
+	for i := len(r.around) - 1; i >= 0; i-- {
+		a := r.around[i]
+		prev := core
+		core = func() (string, error) {
+			return a(ctx, call, prev)
+		}
+	}
+	output, err := core()
 
 	// 3. 封装结果：将执行结果或底层物理错误封装后返回给 Main Loop
 	if err != nil {

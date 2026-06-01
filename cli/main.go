@@ -34,6 +34,9 @@ func main() {
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewBashTool(workDir))
 
+	// 注册耗时日志中间件
+	registry.UseAround(tools.DurationLogMiddleware())
+
 	// 3. 将被包裹的 Provider 注入给 Engine (Engine 毫不知情)
 	eng := engine.NewAgentEngine(trackedProvider, registry, false, false)
 	reporter := engine.NewTerminalReporter()
