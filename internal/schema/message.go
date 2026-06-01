@@ -10,12 +10,19 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
+// Usage 模型token使用情况
+type Usage struct {
+	PromptTokens     int64 `json:"prompt_tokens"`     // 输入 token
+	CompletionTokens int64 `json:"completion_tokens"` // 输出 token
+}
+
 // Message 消息的协议格式约定
 type Message struct {
-	Role       Role       `json:"role"`         // 角色定义
-	Content    string     `json:"content"`      // 存放纯文本内容
-	ToolCalls  []ToolCall `json:"tool_call"`    // 需要调用的工具列表
-	ToolCallID string     `json:"tool_call_id"` // 工具调用之后，调用的工具的ID，作为上下文消息传递，保证消息的连续性
+	Role       Role       `json:"role"`            // 角色定义
+	Content    string     `json:"content"`         // 存放纯文本内容
+	ToolCalls  []ToolCall `json:"tool_call"`       // 需要调用的工具列表
+	ToolCallID string     `json:"tool_call_id"`    // 工具调用之后，调用的工具的ID，作为上下文消息传递，保证消息的连续性
+	Usage      *Usage     `json:"usage,omitempty"` // 存放本地模型调用的token消耗情况
 }
 
 // ToolDefinition 工具的定义

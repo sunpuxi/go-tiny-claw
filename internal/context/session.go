@@ -10,11 +10,13 @@ import (
 
 // Session 代表了一次持续的人机交互过程。它负责维护该会话的完整历史。
 type Session struct {
-	ID        string
-	WorkDir   string // 该会话绑定的物理工作区
-	CreatedAt time.Time
-	UpdatedAt time.Time
-
+	ID                    string
+	WorkDir               string // 该会话绑定的物理工作区
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	TotalPromptTokens     int64   // 总共的输入的token
+	TotalCompletionTokens int64   // 总共的输出的token
+	TotalCostCNY          float64 // 总共的消耗
 	// 存放此 Session 中所有的用户输入、大模型回复和工具调用结果
 	history []schema.Message
 	mu      sync.RWMutex // 读写锁，防止并发读写历史时发生 Data Race
@@ -28,6 +30,15 @@ func NewSession(id string, workDir string) *Session {
 		UpdatedAt: time.Now(),
 		history:   make([]schema.Message, 0),
 	}
+}
+
+// RecordUsage 记录使用情况
+func (s *Session) RecordUsage(prompt int64, completion int64, cost float64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.TotalPromptTokens += prompt
+	s.TotalCompletionTokens += completion
+	s.TotalCostCNY += cost
 }
 
 // Append 线程安全地向 Session 中追加消息

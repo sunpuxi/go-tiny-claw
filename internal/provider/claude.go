@@ -126,6 +126,14 @@ func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, av
 		Role: schema.RoleAssistant,
 	}
 
+	// 填充模型token使用情况
+	if resp.Usage.InputTokens > 0 || resp.Usage.OutputTokens > 0 {
+		resultMsg.Usage = &schema.Usage{
+			PromptTokens:     resp.Usage.InputTokens,
+			CompletionTokens: resp.Usage.OutputTokens,
+		}
+	}
+
 	for _, block := range resp.Content {
 		switch block.Type {
 		case "text":

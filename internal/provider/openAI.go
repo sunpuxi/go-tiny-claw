@@ -132,6 +132,14 @@ func (p *OpenAIProvider) Generate(ctx context.Context, msgs []schema.Message, av
 		Content: choice.Content,
 	}
 
+	// 填充模型token使用情况
+	if resp.Usage.PromptTokens > 0 || resp.Usage.CompletionTokens > 0 {
+		resultMsg.Usage = &schema.Usage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+		}
+	}
+
 	for _, tc := range choice.ToolCalls {
 		if tc.Type == "function" {
 			resultMsg.ToolCalls = append(resultMsg.ToolCalls, schema.ToolCall{
