@@ -31,6 +31,12 @@ func main() {
 	// 2. 核心拼装：用 Tracker 将真实的大脑包裹起来
 	trackedProvider := observability.NewCostTracker(realProvider, modelName, sess)
 
+	// 只读工具列表
+	onlyReadRegistry := tools.NewRegistry()
+	onlyReadRegistry.Register(tools.NewBashTool(workDir))
+	onlyReadRegistry.Register(tools.NewReadSkillTool(workDir))
+	onlyReadRegistry.Register(tools.NewWriteFileTool(workDir))
+
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewBashTool(workDir))
 
@@ -41,7 +47,10 @@ func main() {
 	eng := engine.NewAgentEngine(trackedProvider, registry, false, false)
 	reporter := engine.NewTerminalReporter()
 
-	prompt := `请用 bash 帮我用 date 命令查一下现在的时间。`
+	// 4、注册子智能体
+	registry.Register(tools.NewSubagentTool(eng, onlyReadRegistry, reporter))
+
+	prompt := `请你务必使用subAgent工具,并务必使用deepSeek的模型，使用date命令查询当前的日期`
 
 	log.Println("\n>>> 🚀 启动带仪表盘的可观测性测试...")
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})

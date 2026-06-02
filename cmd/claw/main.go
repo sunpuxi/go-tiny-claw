@@ -42,7 +42,8 @@ func main() {
 	// 【防御沙箱】为子智能体准备受限的只读注册表
 	readOnlyRegistry := tools.NewRegistry()
 	readOnlyRegistry.Register(tools.NewReadFileTool(workDir))
-	readOnlyRegistry.Register(tools.NewBashTool(workDir)) // 允许简单的 grep 等搜索操作
+	readOnlyRegistry.Register(tools.NewBashTool(workDir))      // 允许简单的 grep 等搜索操作
+	readOnlyRegistry.Register(tools.NewReadSkillTool(workDir)) // 动态加载 skill 的工具
 
 	// 主 Agent 的工具箱
 	registry := tools.NewRegistry()
@@ -50,6 +51,7 @@ func main() {
 	registry.Register(tools.NewWriteFileTool(workDir))
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
+	registry.Register(tools.NewReadSkillTool(workDir)) // 动态加载 skill 的工具
 
 	// 引擎实现
 	eng := engine.NewAgentEngine(llmProvider, registry, false, false)

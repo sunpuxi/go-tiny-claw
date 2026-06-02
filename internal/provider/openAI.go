@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/sunpuxi/go-tiny-claw/internal/constants"
 	"os"
 
 	"github.com/openai/openai-go/v3"
@@ -29,6 +30,29 @@ func NewZhipuOpenAIProvider(model string) *OpenAIProvider {
 	return &OpenAIProvider{
 		client: openai.NewClient(option.WithAPIKey(apiKey), option.WithBaseURL(baseURL)),
 		model:  model,
+	}
+}
+
+// NewOpenAiProviderByModelName 根据不同的模型创建不同的Client
+func NewOpenAiProviderByModelName(modelName string) *OpenAIProvider {
+	var apiKey, baseUrl string
+	if modelName == constants.DeepSeekV4Pro {
+		apiKey = os.Getenv("DEEPSEEK_API_KEY")
+		if apiKey == "" {
+			panic("请设置 DEEPSEEK_API_KEY 环境变量")
+		}
+		baseUrl = constants.DeepSeekBaseUrl
+	} else if modelName == constants.ZLMAir {
+		apiKey = os.Getenv("ZHIPU_API_KEY")
+		if apiKey == "" {
+			panic("请设置 ZHIPU_API_KEY 环境变量")
+		}
+		baseUrl = constants.ZLMBaseUrl
+	}
+
+	return &OpenAIProvider{
+		client: openai.NewClient(option.WithAPIKey(apiKey), option.WithBaseURL(baseUrl)),
+		model:  modelName,
 	}
 }
 

@@ -2,6 +2,7 @@ package observability
 
 import (
 	"context"
+	"github.com/sunpuxi/go-tiny-claw/internal/constants"
 	"log"
 	"time"
 
@@ -16,7 +17,8 @@ var PricingModel = map[string]struct {
 	InputPrice  float64
 	OutputPrice float64
 }{
-	"glm-4.5-air": {InputPrice: 0.15, OutputPrice: 0.15}, // 这里假定的大模型价格(每百万Token，tk)
+	constants.ZLMAir:        {InputPrice: 0.15, OutputPrice: 0.15}, // 这里假定的大模型价格(每百万Token，tk)
+	constants.DeepSeekV4Pro: {InputPrice: 3, OutputPrice: 6},       // 这里假定的大模型价格(每百万Token，tk)
 }
 
 // CostTracker 是一个包装了真实 LLMProvider 的装饰器中间件

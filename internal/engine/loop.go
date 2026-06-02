@@ -186,7 +186,7 @@ func (e *AgentEngine) executeTools(ctx context.Context, toolCalls []schema.ToolC
 // RunSub 是专为 Subagent 拉起的一次性受限循环。
 // 它不依赖外部 Session，打完就跑。
 // Reporter：为了让用户在终端看到子智能体的工作轨迹，我们将主线程的 Reporter 透传进来，并打上特殊标记。
-func (e *AgentEngine) RunSub(ctx context.Context, taskPrompt string, readOnlyRegistry tools.Registry, reporter any) (string, error) {
+func (e *AgentEngine) RunSub(ctx context.Context, llModel provider.LLMProvider, taskPrompt string, readOnlyRegistry tools.Registry, reporter any) (string, error) {
 
 	// 【核心优化】：子智能体极其容易偷懒。我们必须在 System Prompt 中严厉警告它必须使用工具！
 	contextHistory := []schema.Message{
