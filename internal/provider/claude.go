@@ -1,4 +1,3 @@
-// internal/provider/claude.go
 package provider
 
 import (
@@ -36,9 +35,9 @@ func (p *ClaudeProvider) Generate(ctx context.Context, msgs []schema.Message, av
 	// 1. 消息翻译
 	for _, msg := range msgs {
 		switch msg.Role {
-		case schema.RoleSystem:
+		case schema.RoleSystem: // 系统提示词
 			systemPrompt = msg.Content
-		case schema.RoleUser:
+		case schema.RoleUser: // 用户提示词
 			if msg.ToolCallID != "" {
 				anthropicMsgs = append(anthropicMsgs, anthropic.NewUserMessage(
 					anthropic.NewToolResultBlock(msg.ToolCallID, msg.Content, false),

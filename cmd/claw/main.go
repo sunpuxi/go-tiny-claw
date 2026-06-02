@@ -114,6 +114,8 @@ func main() {
 
 		// 正常事件回调，恢复 body 后交由 SDK handler 处理
 		r.Body = io.NopCloser(bytes.NewReader(body))
+
+		// 通过上面的 handler 中的feushuRepoter进行消息的回传
 		handler(w, r)
 	})
 
