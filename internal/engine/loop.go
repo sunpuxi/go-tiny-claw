@@ -222,7 +222,7 @@ func (e *AgentEngine) RunSub(ctx context.Context, llModel provider.LLMProvider, 
 		compactedContext := e.compactor.Compact(contextHistory)
 
 		// 子任务要求急速响应，强制关闭主体的慢思考，直接预测行动
-		actionResp, err := e.provider.Generate(ctx, compactedContext, availableTools)
+		actionResp, err := llModel.Generate(ctx, compactedContext, availableTools)
 		if err != nil {
 			return "", fmt.Errorf("子智能体推理失败: %w", err)
 		}

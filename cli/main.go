@@ -50,7 +50,7 @@ func main() {
 	// 4、注册子智能体
 	registry.Register(tools.NewSubagentTool(eng, onlyReadRegistry, reporter))
 
-	prompt := `请你务必使用subAgent工具,并务必使用deepSeek的模型，使用date命令查询当前的日期`
+	prompt := `请你务必使用subAgent工具,并务必使用deepSeek的模型，让subAgent回答它是什么模型`
 
 	log.Println("\n>>> 🚀 启动带仪表盘的可观测性测试...")
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
