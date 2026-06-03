@@ -8,7 +8,6 @@ import (
 
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
-	"github.com/sunpuxi/go-tiny-claw/internal/observability" // 导入监控包
 	"github.com/sunpuxi/go-tiny-claw/internal/provider"
 	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"github.com/sunpuxi/go-tiny-claw/internal/tools"
@@ -20,50 +19,29 @@ func main() {
 	}
 
 	workDir, _ := os.Getwd()
-	modelName := "glm-4.5-air"
-
-	// 1. 初始化真实的底层大脑
-	realProvider := provider.NewZhipuOpenAIProvider(modelName)
-
-	sessionID := "test_observability_001"
-	sess := ctxpkg.GlobalSessionMgr.GetOrCreate(sessionID, workDir)
-
-	// 2. 核心拼装：用 Tracker 将真实的大脑包裹起来
-	trackedProvider := observability.NewCostTracker(realProvider, modelName, sess)
-
-	// 只读工具列表
-	onlyReadRegistry := tools.NewRegistry()
-	onlyReadRegistry.Register(tools.NewBashTool(workDir))
-	onlyReadRegistry.Register(tools.NewReadSkillTool(workDir))
-	onlyReadRegistry.Register(tools.NewWriteFileTool(workDir))
+	workDir += "/workspace"
+	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
 
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewBashTool(workDir))
+	registry.Register(tools.NewWriteFileTool(workDir))
 
-	// 注册耗时日志中间件
-	registry.UseAround(tools.DurationLogMiddleware())
-
-	// 3. 将被包裹的 Provider 注入给 Engine (Engine 毫不知情)
-	eng := engine.NewAgentEngine(trackedProvider, registry, false, false)
+	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
 	reporter := engine.NewTerminalReporter()
+	sess := ctxpkg.GlobalSessionMgr.GetOrCreate("test_trace_001", workDir)
 
-	// 4、注册子智能体
-	registry.Register(tools.NewSubagentTool(eng, onlyReadRegistry, reporter))
-
-	prompt := `请你务必使用subAgent工具,并务必使用deepSeek的模型，让subAgent回答它是什么模型`
-
-	log.Println("\n>>> 🚀 启动带仪表盘的可观测性测试...")
+	// 触发一个跨工具类型的并发任务
+	prompt := `
+    为了加快执行速度，请你在一轮回复中，【同时并行】完成以下两件事：
+    1. 使用 bash 工具执行 'sleep 2 && echo "系统环境检查完毕"'
+    2. 使用 write_file_tool 工具，在当前目录下创建一个 'trace_test.md'，内容写上 "测试并发的写入"。
+    请确保你是分别调用两个不同的工具，不要试图把它们合并成一个命令！
+    `
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
 
+	log.Println("\n>>> 🚀 启动带 Tracing 链路追踪的测试...")
 	err := eng.Run(context.Background(), sess, reporter)
 	if err != nil {
-		log.Fatalf("引擎运行崩溃: %v", err)
+		log.Fatalf("引擎崩溃: %v", err)
 	}
-
-	log.Printf("\n================ 财务报表 ================\n")
-	log.Printf("会话 ID: %s\n", sess.ID)
-	log.Printf("总消耗 Input Tokens: %d\n", sess.TotalPromptTokens)
-	log.Printf("总消耗 Output Tokens: %d\n", sess.TotalCompletionTokens)
-	log.Printf("总计费用 (CNY): ¥%.6f\n", sess.TotalCostCNY)
-	log.Printf("==========================================\n")
 }

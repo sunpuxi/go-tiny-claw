@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/sunpuxi/go-tiny-claw/internal/observability"
 	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"log"
 )
@@ -97,6 +98,12 @@ func (r *registryImpl) GetAvailableTools() []schema.ToolDefinition {
 }
 
 func (r *registryImpl) Execute(ctx context.Context, call schema.ToolCall) schema.ToolResult {
+	// 【埋点5】追踪工具的执行
+	ctx, toolSpan := observability.StartSpan(ctx, "tools.Execute")
+	toolSpan.AddAttribute("tool.name", call.Name)
+	toolSpan.AddAttribute("arguments", string(call.Arguments))
+	defer toolSpan.EndSpan()
+
 	// 1. 路由查找：如果在注册表中找不到该工具，这是模型产生了幻觉，直接向模型抛出错误
 	tool, exists := r.tools[call.Name]
 	if !exists {
@@ -147,9 +154,20 @@ func (r *registryImpl) Execute(ctx context.Context, call schema.ToolCall) schema
 		}
 	}
 
+	// 将执行工具的结果输出添加进埋点信息中
+	toolSpan.AddAttribute("output_preview", truncate(output, 100))
+
 	return schema.ToolResult{
 		ToolCallID: call.ID,
 		Output:     output,
 		IsError:    false,
 	}
+}
+
+// 截取部分的执行结果即可，防止追踪文件的大小膨胀
+func truncate(s string, maxLength int) string {
+	if len(s) > maxLength {
+		s = s[:maxLength] + "..."
+	}
+	return s
 }

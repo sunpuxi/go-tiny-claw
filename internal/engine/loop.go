@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/sunpuxi/go-tiny-claw/internal/observability"
 	"log"
 	"strings"
 	"sync"
@@ -38,12 +39,31 @@ func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking boo
 func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter Reporter) error {
 	log.Printf("[Engine] 唤醒会话 [%s]，锁定工作区: %s (PlanMode: %v)\n", session.ID, session.WorkDir, e.PlanMode)
 
+	// 【埋点1】开启Root Span，记录整个任务的生命周期
+	ctx, rootSpan := observability.StartSpan(ctx, "root")
+	rootSpan.AddAttribute("session_id", session.ID)
+	rootSpan.AddAttribute("WorkDir", session.WorkDir)
+
+	// 保证在引擎退出时能够将追踪信息保存到文件中
+	defer func() {
+		rootSpan.EndSpan()
+		_ = observability.ExportTraceToFile(rootSpan, session.WorkDir, session.ID)
+		log.Printf("📊 [Tracing] 本次任务的执行回放链路已保存至工作区的 .claw/traces 目录下\n")
+	}()
+
 	// 全局的Prompt加载
 	composer := ctxpkg.NewPromptComposer(session.WorkDir, e.PlanMode)
 	// 构建提示词，并读取所有的项目中的skill，仅提供skill名称
 	systemMsg := composer.Build()
 
+	// ReAct 循环的轮次
+	turn := 0
 	for {
+		turn++
+		// 【埋点2】 记录单次的 ReAct 循环
+		turnCtx, turnSpan := observability.StartSpan(ctx, fmt.Sprintf("turn_%d", turn))
+		defer turnSpan.EndSpan()
+
 		// 加载所有的工具列表
 		availableTools := e.registry.GetAvailableTools()
 		// 获取短期的工作记忆
@@ -55,16 +75,22 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 		// 压缩信息（函数内部自行决断是否压缩，此处只需要显示的调用一下即可）
 		compactedContext := e.compactor.Compact(contextHistory)
 
+		// 记录发给模型的真实的上下文大小
+		turnSpan.AddAttribute("context_message_count", len(compactedContext))
+
 		// 深度思考模式
-		currentTurnThinkingContent, compactedContext, err := e.think(ctx, compactedContext, reporter)
+		currentTurnThinkingContent, compactedContext, err := e.think(turnCtx, compactedContext, reporter)
 		if err != nil {
 			return err
 		}
 
+		// 【埋点4】记录工具执行
+		actCtx, actSpan := observability.StartSpan(turnCtx, "llm.act")
 		// 深度思考模式之后，挂载工具列表，开始后续的任务执行
-		actionResp, err := e.provider.Generate(ctx, compactedContext, availableTools)
+		actionResp, err := e.provider.Generate(actCtx, compactedContext, availableTools)
+		actSpan.EndSpan()
 		if err != nil {
-			return fmt.Errorf("Action 阶段失败: %w", err)
+			return fmt.Errorf("action 阶段失败: %w", err)
 		}
 
 		// (合并为合法的单条 Assistant 消息)
@@ -81,11 +107,12 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 
 		// 如果没有工具调用，则ReAct循环结束，认为当前的会话已经结束
 		if len(actionResp.ToolCalls) == 0 {
+			actSpan.EndSpan()
 			break
 		}
 
 		// 并发执行所有工具调用
-		observationMsgs, lastToolCall, lastToolResult := e.executeTools(ctx, actionResp.ToolCalls, reporter)
+		observationMsgs, lastToolCall, lastToolResult := e.executeTools(turnCtx, actionResp.ToolCalls, reporter)
 
 		// 死循环检测与消息注入
 		resultMessage := e.injector.CheckAndInject(lastToolCall, lastToolResult)
@@ -106,12 +133,16 @@ func (e *AgentEngine) think(ctx context.Context, compactedContext []schema.Messa
 		return "", compactedContext, nil
 	}
 
+	// 【埋点3】记录thinking阶段
+	thinkingCtx, thinkingSpan := observability.StartSpan(ctx, "llm.thinking")
+	defer thinkingSpan.EndSpan()
+
 	if reporter != nil {
 		reporter.OnThinking(ctx)
 	}
 
 	// 调用LLM，不传入工具列表，强制模型先思考规划
-	thinkResp, err := e.provider.Generate(ctx, compactedContext, nil)
+	thinkResp, err := e.provider.Generate(thinkingCtx, compactedContext, nil)
 	if err != nil {
 		return "", nil, fmt.Errorf("Thinking 阶段失败: %w", err)
 	}
