@@ -144,7 +144,7 @@ func (e *AgentEngine) think(ctx context.Context, compactedContext []schema.Messa
 	// 调用LLM，不传入工具列表，强制模型先思考规划
 	thinkResp, err := e.provider.Generate(thinkingCtx, compactedContext, nil)
 	if err != nil {
-		return "", nil, fmt.Errorf("Thinking 阶段失败: %w", err)
+		return "", nil, fmt.Errorf("thinking 阶段失败: %w", err)
 	}
 
 	// 当前思考的结果信息，拼接进历史会话中
