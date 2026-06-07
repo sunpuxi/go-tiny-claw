@@ -58,7 +58,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", fmt.Errorf("参数解析失败: %w", err)
 	}
 
-	// 2. 拼接绝对路径 (注意：生产环境中需要做路径穿越检测防范，防止 ../../etc/passwd)
+	// 2. 拼接绝对路径 (注意：生产环境中需要做路径穿越检测防范，防止 ../../etc/passwd)  -- 防止路径注入
 	fullPath := filepath.Join(t.workDir, input.Path)
 
 	// 3. 执行物理 IO 操作
