@@ -5,14 +5,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
-	"github.com/sunpuxi/go-tiny-claw/config"
-	"github.com/sunpuxi/go-tiny-claw/internal/feishu"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/larksuite/oapi-sdk-go/v3/core/httpserverext"
+	"github.com/sunpuxi/go-tiny-claw/config"
+	"github.com/sunpuxi/go-tiny-claw/internal/feishu"
 
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
@@ -54,7 +55,7 @@ func main() {
 	registry.Register(tools.NewReadSkillTool(workDir)) // 动态加载 skill 的工具
 
 	// 引擎实现
-	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
+	eng := engine.NewAgentEngine(llmProvider, ctxpkg.NewCompactor(2000, 5), registry, false, false)
 
 	// 绑定 subAgent工具
 	registry.Register(tools.NewSubagentTool(eng, readOnlyRegistry, reporter))

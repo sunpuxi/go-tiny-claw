@@ -3,17 +3,18 @@ package eval
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"runtime"
+	"time"
+
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
 	"github.com/sunpuxi/go-tiny-claw/internal/observability"
 	"github.com/sunpuxi/go-tiny-claw/internal/provider"
 	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"github.com/sunpuxi/go-tiny-claw/internal/tools"
-	"log"
-	"os"
-	"os/exec"
-	"runtime"
-	"time"
 )
 
 type TestCase struct {
@@ -114,7 +115,7 @@ func (b *BenchmarkRunner) RunSingleTest(ctx context.Context, tc TestCase) TestRe
 	registry.Register(tools.NewEditFileTool(workDir))
 
 	// 创建引擎
-	eng := engine.NewAgentEngine(trackerProvider, registry, false, false)
+	eng := engine.NewAgentEngine(trackerProvider, nil, registry, false, false)
 
 	// 将当前测试用例的提示词注入
 	session.Append(schema.Message{Role: schema.RoleUser, Content: tc.TaskPrompt})
