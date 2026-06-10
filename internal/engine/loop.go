@@ -19,18 +19,18 @@ type AgentEngine struct {
 	registry       tools.Registry
 	EnableThinking bool
 	PlanMode       bool
-	compactor      *ctxpkg.Compactor
+	compactor      ctxpkg.CompactorInterface
 	recovery       *ctxpkg.RecoveryManager // 【新增】自愈管理器
 	injector       *ReminderInjector
 }
 
-func NewAgentEngine(p provider.LLMProvider, r tools.Registry, enableThinking bool, planMode bool) *AgentEngine {
+func NewAgentEngine(p provider.LLMProvider, compactor ctxpkg.CompactorInterface, r tools.Registry, enableThinking bool, planMode bool) *AgentEngine {
 	return &AgentEngine{
 		provider:       p,
 		registry:       r,
 		EnableThinking: enableThinking,
 		PlanMode:       planMode,
-		compactor:      ctxpkg.NewCompactor(20000, 6),
+		compactor:      compactor,
 		recovery:       ctxpkg.NewRecoveryManager(), // 初始化 Recovery
 		injector:       NewReminderInjector(),       // 初始化死循环注入处理器
 	}

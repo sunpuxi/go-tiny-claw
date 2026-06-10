@@ -10,10 +10,11 @@ import (
 )
 
 type LLMCompactor struct {
-	llm *openai.LLM
+	llm       *openai.LLM
+	maxLength int
 }
 
-func NewLLMCompactor(modelName string) *LLMCompactor {
+func NewLLMCompactor(modelName string, maxLength int) *LLMCompactor {
 	llm, err := openai.New(
 		openai.WithModel(modelName),
 		openai.WithToken(os.Getenv("DEEPSEEK_API_KEY")),
@@ -24,11 +25,17 @@ func NewLLMCompactor(modelName string) *LLMCompactor {
 	}
 
 	return &LLMCompactor{
-		llm: llm,
+		llm:       llm,
+		maxLength: maxLength,
 	}
 }
 
-func (l *LLMCompactor) Compactor(msgs []schema.Message) []schema.Message {
+func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
+	// 没有超过设定的阈值上限，则直接返回
+	if EstimateLength(msgs) < l.maxLength {
+		return msgs
+	}
+
 	// 提示词
 	prompt := `
 现在，你是一个专业的字符压缩专家，我会给你一段文本，这段文本是提供给Agent执行的上下文信息，你需要保留其中的关键信息，
@@ -58,6 +65,10 @@ func (l *LLMCompactor) Compactor(msgs []schema.Message) []schema.Message {
 		// 暂时处理为返回原始文本，后续可优化为继续调用模型处理，直至返回正确的结果
 		return msgs
 	}
+
+	// 对比压缩前后的上下文信息
+	log.Printf("[Compact] 压缩前：%d 字节，压缩后：%d 字节 \n", EstimateLength(msgs), EstimateLength(respMsgs))
+	log.Printf("[Compact] 压缩后的内容：%s\n", respMsgs)
 
 	return respMsgs
 }

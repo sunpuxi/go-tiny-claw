@@ -23,7 +23,7 @@ func NewCompactor(maxChars int, retainLastMsgs int) *Compactor {
 // Compact 接收准备发送给大模型的消息数组。
 // 如果总长度超标，对远期历史区进行全量掩码 (Masking)，对短期保护区进行超长局部截断 (Truncation)。
 func (c *Compactor) Compact(msgs []schema.Message) []schema.Message {
-	currentLength := c.estimateLength(msgs)
+	currentLength := EstimateLength(msgs)
 
 	// 如果没有超过水位线，直接返回原数组 (大多数情况下的正常路径)
 	if currentLength < c.MaxChars {
@@ -82,14 +82,14 @@ func (c *Compactor) Compact(msgs []schema.Message) []schema.Message {
 		compacted = append(compacted, newMsg)
 	}
 
-	newLength := c.estimateLength(compacted)
+	newLength := EstimateLength(compacted)
 	log.Printf("[Compactor] ✅ 压缩完成。上下文长度从 %d 降至 %d 字符。\n", currentLength, newLength)
 
 	return compacted
 }
 
-// estimateLength 粗略计算当前上下文的总字符长度
-func (c *Compactor) estimateLength(msgs []schema.Message) int {
+// EstimateLength 粗略计算当前上下文的总字符长度
+func EstimateLength(msgs []schema.Message) int {
 	length := 0
 	for _, msg := range msgs {
 		length += len(msg.Content)

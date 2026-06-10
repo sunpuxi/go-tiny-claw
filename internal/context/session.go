@@ -86,6 +86,12 @@ func (s *Session) GetWorkingMemory(limit int) []schema.Message {
 	return res
 }
 
+func (s *Session) GetHistory() []schema.Message {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.history
+}
+
 // ==========================================
 // 全局 Session Manager: 用于多用户/多终端隔离
 // ==========================================

@@ -22,20 +22,23 @@ func main() {
 	workDir += "/workspace"
 	llmProvider := provider.NewZhipuOpenAIProvider("glm-4.5-air")
 
+	// 工具注册列表
 	registry := tools.NewRegistry()
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewWriteFileTool(workDir))
+	registry.Register(tools.NewReadFileTool(workDir))
+	registry.Register(tools.NewEditFileTool(workDir))
 
-	eng := engine.NewAgentEngine(llmProvider, registry, false, false)
+	// 上下文压缩策略
+	llmCompactor := ctxpkg.NewLLMCompactor("deepseek-chat", 200)
+
+	eng := engine.NewAgentEngine(llmProvider, llmCompactor, registry, false, false)
 	reporter := engine.NewTerminalReporter()
 	sess := ctxpkg.GlobalSessionMgr.GetOrCreate("test_trace_001", workDir)
 
 	// 触发一个跨工具类型的并发任务
 	prompt := `
-    为了加快执行速度，请你在一轮回复中，【同时并行】完成以下两件事：
-    1. 使用 bash 工具执行 'sleep 2 && echo "系统环境检查完毕"'
-    2. 使用 write_file_tool 工具，在当前目录下创建一个 'trace_test.md'，内容写上 "测试并发的写入"。
-    请确保你是分别调用两个不同的工具，不要试图把它们合并成一个命令！
+    在当前的工作目录下，新建一个测试项目，在这个项目中比对快速排序和冒泡排序在给一个长度为10000的切片进行排序时的性能比较
     `
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
 
