@@ -91,7 +91,7 @@ type editFileArgs struct {
 // fuzzyReplace 实现了四级容错降级替换算法
 func fuzzyReplace(originalContent, oldText, newText string) (string, error) {
 	// L1: 精确匹配(如果没有完成匹配替换，则交给下一个匹配算法执行)
-	count, str, err := exactMatch(originalContent, oldText, newText)
+	str, err := exactMatch(originalContent, oldText, newText)
 	if err != nil {
 		return "", err
 	}
@@ -103,7 +103,7 @@ func fuzzyReplace(originalContent, oldText, newText string) (string, error) {
 	normalizedContent := strings.ReplaceAll(originalContent, "\r\n", "\n")
 	normalizedOld := strings.ReplaceAll(oldText, "\r\n", "\n")
 
-	count = strings.Count(normalizedContent, normalizedOld)
+	count := strings.Count(normalizedContent, normalizedOld)
 	if count == 1 {
 		return strings.Replace(normalizedContent, normalizedOld, newText, 1), nil
 	}
@@ -125,15 +125,15 @@ func fuzzyReplace(originalContent, oldText, newText string) (string, error) {
 }
 
 // 精确匹配，如果匹配到了多处则直接报错。没有匹配到则直接返回
-func exactMatch(originalContent, oldText, newText string) (int, string, error) {
+func exactMatch(originalContent, oldText, newText string) (string, error) {
 	count := strings.Count(originalContent, oldText)
 	if count == 1 {
-		return count, strings.Replace(originalContent, oldText, newText, 1), nil
+		return strings.Replace(originalContent, oldText, newText, 1), nil
 	}
 	if count > 1 {
-		return count, "", fmt.Errorf("需要替换的文本匹配到了多处，请提供更多的上下文以确保，唯一性")
+		return "", fmt.Errorf("需要替换的文本匹配到了多处，请提供更多的上下文以确保，唯一性")
 	}
-	return count, "", nil
+	return "", nil
 }
 
 // lineByLineReplace 将文本按行切割，去除首尾空白后进行滑动窗口匹配
