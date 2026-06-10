@@ -66,9 +66,5 @@ func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
 		return msgs
 	}
 
-	// 对比压缩前后的上下文信息
-	log.Printf("[Compact] 压缩前：%d 字节，压缩后：%d 字节 \n", EstimateLength(msgs), EstimateLength(respMsgs))
-	log.Printf("[Compact] 压缩后的内容：%s\n", respMsgs)
-
 	return respMsgs
 }
