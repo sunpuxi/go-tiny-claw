@@ -49,14 +49,13 @@ func (t *EditFileTool) Definition() schema.ToolDefinition {
 	}
 }
 
-// internal/tools/edit_file.go (续)
-
 func (t *EditFileTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var input editFileArgs
 	if err := json.Unmarshal(args, &input); err != nil {
 		return "", fmt.Errorf("参数解析失败: %w", err)
 	}
 
+	// 拼接的路径也需要在当前的工作目录下，防止路径注入造成的穿越现象
 	fullPath := filepath.Join(t.workDir, input.Path)
 
 	// 1. 读取原文件内容
@@ -91,13 +90,13 @@ type editFileArgs struct {
 
 // fuzzyReplace 实现了四级容错降级替换算法
 func fuzzyReplace(originalContent, oldText, newText string) (string, error) {
-	// L1: 精确匹配
-	count := strings.Count(originalContent, oldText)
-	if count == 1 {
-		return strings.Replace(originalContent, oldText, newText, 1), nil
+	// L1: 精确匹配(如果没有完成匹配替换，则交给下一个匹配算法执行)
+	count, str, err := exactMatch(originalContent, oldText, newText)
+	if err != nil {
+		return "", err
 	}
-	if count > 1 {
-		return "", fmt.Errorf("old_text 匹配到了 %d 处，请提供更多的上下文代码以确保唯一性", count)
+	if str != "" {
+		return str, nil
 	}
 
 	// L2: 换行符归一化 (统一将 \r\n 转换为 \n)
@@ -123,6 +122,18 @@ func fuzzyReplace(originalContent, oldText, newText string) (string, error) {
 
 	// L4: 逐行去缩进匹配 (最强力的容错：消除大模型遗漏缩进的幻觉)
 	return lineByLineReplace(normalizedContent, normalizedOld, newText)
+}
+
+// 精确匹配，如果匹配到了多处则直接报错。没有匹配到则直接返回
+func exactMatch(originalContent, oldText, newText string) (int, string, error) {
+	count := strings.Count(originalContent, oldText)
+	if count == 1 {
+		return count, strings.Replace(originalContent, oldText, newText, 1), nil
+	}
+	if count > 1 {
+		return count, "", fmt.Errorf("需要替换的文本匹配到了多处，请提供更多的上下文以确保，唯一性")
+	}
+	return count, "", nil
 }
 
 // lineByLineReplace 将文本按行切割，去除首尾空白后进行滑动窗口匹配
