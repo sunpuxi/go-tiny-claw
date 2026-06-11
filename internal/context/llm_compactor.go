@@ -55,7 +55,9 @@ func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
 	ctx := context.Background()
 	resp, err := l.llm.Call(ctx, prompt+string(jsonStr))
 	if err != nil {
-		log.Fatal(err)
+		// 报错暂时只记录日志，降级返回原始文本，防止成为单点问题
+		log.Printf("[Compact] llm call err:%+v",err)
+		return msgs
 	}
 
 	// 反序列化为上下文信息的格式
