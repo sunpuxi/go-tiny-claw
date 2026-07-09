@@ -5,11 +5,9 @@ import (
 	"context"
 	"log"
 	"os"
-	"time"
 
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
-	"github.com/sunpuxi/go-tiny-claw/internal/mcp"
 	"github.com/sunpuxi/go-tiny-claw/internal/provider"
 	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"github.com/sunpuxi/go-tiny-claw/internal/tools"
@@ -31,23 +29,6 @@ func main() {
 	registry.Register(tools.NewReadFileTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
 
-	// ===== MCP 工具集成 =====
-	mcpCfg, err := mcp.LoadMCPConfig("config/mcp_servers.yaml")
-	if err != nil {
-		log.Printf("[MCP] 配置加载失败: %v，跳过 MCP 工具集成", err)
-	} else if mcpCfg != nil && len(mcpCfg.Servers) > 0 {
-		mcpManager := mcp.NewManager(mcpCfg)
-		startCtx, startCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := mcpManager.Start(startCtx); err != nil {
-			log.Printf("[MCP] MCP 服务器启动失败: %v", err)
-		} else {
-			log.Printf("[MCP] 成功启动，共发现 %d 个 MCP 工具", mcpManager.ToolCount())
-			mcpManager.RegisterAll(registry)
-		}
-		startCancel()
-		defer mcpManager.Shutdown()
-	}
-
 	// 上下文压缩策略
 	llmCompactor := ctxpkg.NewLLMCompactor("deepseek-chat", 4000)
 
@@ -62,7 +43,7 @@ func main() {
 	sess.Append(schema.Message{Role: schema.RoleUser, Content: prompt})
 
 	log.Println("\n>>> 🚀 启动带 Tracing 链路追踪的测试...")
-	err = eng.Run(context.Background(), sess, reporter)
+	err := eng.Run(context.Background(), sess, reporter)
 	if err != nil {
 		log.Fatalf("引擎崩溃: %v", err)
 	}
