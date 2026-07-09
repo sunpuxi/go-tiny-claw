@@ -111,7 +111,7 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 			break
 		}
 
-		// 并发执行所有工具调用
+		// 并发执行所有工具调用 此处的工具并发工具执行需要由模型去决策，可以将工具调用分为多batch，每个不同的batch中的工具调用可以并发执行，batch 与 batch 之间必须顺序执行。不需要人工或者代码介入
 		observationMsgs, lastToolCall, lastToolResult := e.executeTools(turnCtx, actionResp.ToolCalls, reporter)
 
 		// 死循环检测与消息注入

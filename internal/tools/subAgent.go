@@ -63,7 +63,7 @@ func (t *SubagentTool) Definition() schema.ToolDefinition {
 
 type subagentArgs struct {
 	TaskPrompt   string `json:"task_prompt"`
-	LLMModelName string `json:"llm_model_name"`
+	LLMModelName string `json:"llm_model_name"`  // 新增功能：根据任务的难度去选择不同能力的模型执行对应的任务
 }
 
 func (t *SubagentTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
