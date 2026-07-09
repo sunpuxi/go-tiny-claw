@@ -1,8 +1,10 @@
 package tools
 
-import(
-    "context"
-    "github.com/sunpuxi/go-tiny-claw/internal/schema"
+import (
+	"context"
+	"encoding/json"
+
+	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 )
 
 // WebSearchTool 搜索信息的工具
@@ -22,6 +24,6 @@ func (w *WebSearchTool) Definition() schema.ToolDefinition {
     return schema.ToolDefinition{}
 }
 
-func (w *WebSearchTool) Execute(ctx context,arg json.RawMessage) (string,error) {
+func (w *WebSearchTool) Execute(ctx context.Context,arg json.RawMessage) (string,error) {
     return "",nil
 }
