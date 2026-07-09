@@ -1,8 +1,27 @@
 package tools
 
-// WebSearchTool 网络搜索工具（搜索文本信息，如果搜索到url，还需要webFetch工具）
+import(
+    "context"
+    "github.com/sunpuxi/go-tiny-claw/internal/schema"
+)
+
+// WebSearchTool 搜索信息的工具
 type WebSearchTool struct {
-    ID int `json:"id"`
-    Name string `json:"name"`
-    Arguments json.RawMessage `json:"arguments"`
+    workDir string
+}
+
+func NewWebSearchTool(workDir string) *WebSearchTool {
+    return &WebSearchTool{workDir:workDir}
+}
+
+func (w *WebSearchTool) Name() string {
+    return "web_search_tool"
+}
+
+func (w *WebSearchTool) Definition() schema.ToolDefinition {
+    return schema.ToolDefinition{}
+}
+
+func (w *WebSearchTool) Execute(ctx context,arg json.RawMessage) (string,error) {
+    return "",nil
 }
