@@ -30,7 +30,7 @@ func main() {
 	registry.Register(tools.NewEditFileTool(workDir))
 
 	// 上下文压缩策略
-	llmCompactor := ctxpkg.NewLLMCompactor("deepseek-chat", 200)
+	llmCompactor := ctxpkg.NewLLMCompactor("deepseek-chat", 4000)
 
 	eng := engine.NewAgentEngine(llmProvider, llmCompactor, registry, false, false)
 	reporter := engine.NewTerminalReporter()
