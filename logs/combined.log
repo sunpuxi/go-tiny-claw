@@ -1,0 +1,6 @@
+{"customDataFile":false,"level":"info","message":"Loading mock data","service":"mcp-mock","timestamp":"2026-07-09 20:28:41"}
+{"host":"localhost","level":"info","message":"MCP Server initialized","port":7988,"service":"mcp-mock","timestamp":"2026-07-09 20:28:41","toolCount":17}
+{"level":"info","message":"Streaming service initialized","service":"mcp-mock","timestamp":"2026-07-09 20:28:41"}
+{"level":"info","message":"WebSocket server initialized","path":"/stream","service":"mcp-mock","timestamp":"2026-07-09 20:28:41"}
+{"config":{"host":"localhost","protocol":"MCP","streaming":true,"toolsCount":17,"version":"0.0.1"},"level":"info","message":"Server Started","port":7988,"service":"mcp-mock","timestamp":"2026-07-09 20:28:41","type":"startup"}
+{"level":"info","message":"Server Shutdown","reason":"SIGINT received","service":"mcp-mock","timestamp":"2026-07-09 20:29:18","type":"shutdown"}

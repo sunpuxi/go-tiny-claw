@@ -17,6 +17,7 @@ import (
 
 	ctxpkg "github.com/sunpuxi/go-tiny-claw/internal/context"
 	"github.com/sunpuxi/go-tiny-claw/internal/engine"
+	"github.com/sunpuxi/go-tiny-claw/internal/mcp"
 	"github.com/sunpuxi/go-tiny-claw/internal/provider"
 	"github.com/sunpuxi/go-tiny-claw/internal/schema"
 	"github.com/sunpuxi/go-tiny-claw/internal/tools"
@@ -53,6 +54,24 @@ func main() {
 	registry.Register(tools.NewBashTool(workDir))
 	registry.Register(tools.NewEditFileTool(workDir))
 	registry.Register(tools.NewReadSkillTool(workDir)) // 动态加载 skill 的工具
+
+	// ===== MCP 工具集成 =====
+	// 从配置文件加载 MCP 服务器列表，启动子进程，发现并注册远程工具
+	mcpCfg, err := mcp.LoadMCPConfig("config/mcp_servers.yaml")
+	if err != nil {
+		log.Printf("[MCP] 配置加载失败: %v，跳过 MCP 工具集成", err)
+	} else if mcpCfg != nil && len(mcpCfg.Servers) > 0 {
+		mcpManager := mcp.NewManager(mcpCfg)
+		startCtx, startCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := mcpManager.Start(startCtx); err != nil {
+			log.Printf("[MCP] MCP 服务器启动失败: %v", err)
+		} else {
+			log.Printf("[MCP] 成功启动，共发现 %d 个 MCP 工具", mcpManager.ToolCount())
+			mcpManager.RegisterAll(registry)
+		}
+		startCancel()
+		defer mcpManager.Shutdown() // 程序退出时优雅关闭所有 MCP 子进程
+	}
 
 	// 引擎实现
 	eng := engine.NewAgentEngine(llmProvider, ctxpkg.NewCompactor(2000, 5), registry, false, false)
@@ -125,7 +144,7 @@ func main() {
 	port := ":48080"
 	log.Printf("🚀 go-tiny-claw 飞书服务端已启动，正在监听 %s 端口\n", port)
 
-	err := http.ListenAndServe(port, nil)
+	err = http.ListenAndServe(port, nil)
 	if err != nil {
 		log.Fatalf("服务器启动失败: %v", err)
 	}
