@@ -53,6 +53,7 @@ func (b *BenchmarkRunner) RunSuite(ctx context.Context, tcs []TestCase) {
 	passedCount := 0
 	totalCost := 0.0
 
+	// 启动 agent 引擎测试任务，统计成功的任务的数量
 	for _, tc := range tcs {
 		log.Printf("\n>>> 正在执行测试用例:[%s]:%s\n", tc.ID, tc.Name)
 		res := b.RunSingleTest(ctx, tc)
@@ -64,6 +65,8 @@ func (b *BenchmarkRunner) RunSuite(ctx context.Context, tcs []TestCase) {
 		} else {
 			log.Printf(">>> ❌ 用例 [%s] 测试失败，耗时：%dms, 总消耗：%f元,错误信息：%s\n", res.TestCaseID, res.DurationMs, res.TotalCostCNY, res.ErrorMsg)
 		}
+		
+		// 统计花费信息 
 		totalCost += res.TotalCostCNY
 	}
 
@@ -81,11 +84,13 @@ func (b *BenchmarkRunner) RunSingleTest(ctx context.Context, tc TestCase) TestRe
 	workDir += fmt.Sprintf("/workspace/%s_%d", tc.ID, time.Now().Unix())
 	_ = os.MkdirAll(workDir, 0755)
 
-	// 执行SetUp 脚本代码【可选】
+	// 执行SetUp 脚本代码（拉取网上的代码其它的一些命令做前置的准备）【可选】
 	setupScript := tc.SetupScript
 	if runtime.GOOS == "windows" && tc.SetupScriptWin != "" {
 		setupScript = tc.SetupScriptWin
 	}
+
+	// 分不同的环境执行命令
 	if setupScript != "" {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
