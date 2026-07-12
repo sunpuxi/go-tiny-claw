@@ -30,6 +30,7 @@ func NewLLMCompactor(modelName string, maxLength int) *LLMCompactor {
 	}
 }
 
+// Compact 上下文的压缩策略--LLM 压缩（可以采用费用较低的 LLM 实现这个任务）
 func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
 	// 没有超过设定的阈值上限，则直接返回
 	if EstimateLength(msgs) < l.maxLength {
@@ -50,6 +51,8 @@ func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
 		// 如果压缩失败，则返回原始的文本信息
 		return msgs
 	}
+
+	// todo LLM 进行上下文的压缩任务的时候，不一定第一次就可以返回正确的结果，这里后续可以做的策略：使用三个不同的 LLM 进行上下文的压缩，采用返回结果正确的那个作为结果即可
 
 	// 调用 LLM
 	ctx := context.Background()
