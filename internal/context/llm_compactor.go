@@ -53,6 +53,7 @@ func (l *LLMCompactor) Compact(msgs []schema.Message) []schema.Message {
 	}
 
 	// todo LLM 进行上下文的压缩任务的时候，不一定第一次就可以返回正确的结果，这里后续可以做的策略：使用三个不同的 LLM 进行上下文的压缩，采用返回结果正确的那个作为结果即可
+	// 或者当采用多个模型进行上下文的压缩之后，采用返回的信息最短的一个。这里可以做的优化比较多
 
 	// 调用 LLM
 	ctx := context.Background()
