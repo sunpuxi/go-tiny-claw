@@ -45,6 +45,7 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 	rootSpan.AddAttribute("WorkDir", session.WorkDir)
 
 	// 保证在引擎退出时能够将追踪信息保存到文件中
+	// todo 后续可以做的优化：当程序退出时，将本次任务执行的概要记录到文件中，当重启 Agent 的时候，提供一个可以从历史会话恢复 memory
 	defer func() {
 		rootSpan.EndSpan()
 		_ = observability.ExportTraceToFile(rootSpan, session.WorkDir, session.ID)
