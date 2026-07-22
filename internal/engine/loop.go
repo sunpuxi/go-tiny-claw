@@ -79,7 +79,7 @@ func (e *AgentEngine) Run(ctx context.Context, session *ctxpkg.Session, reporter
 		// 记录发给模型的真实的上下文大小
 		turnSpan.AddAttribute("context_message_count", len(compactedContext))
 
-		// 深度思考模式
+		// 深度思考模式【这个模式下，暂时不挂载工具列表的原因是模型在看到有可用的工具列表会冲动调用，而这个阶段主要做任务的规划等，所以不能挂载工具列表】
 		currentTurnThinkingContent, compactedContext, err := e.think(turnCtx, compactedContext, reporter)
 		if err != nil {
 			return err
