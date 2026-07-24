@@ -78,7 +78,7 @@ func (c *PromptComposer) Build() schema.Message {
 		promptBuilder.WriteString("\n```\n")
 	}
 
-	// 4. 动态加载技能外挂 (Skills)
+	// 4. 动态加载技能外挂（采用目前主流的渐进式加载的策略，首先喂给模型一个skill的列表，但不包含具体的skill内容，LLM 根据 skill 的内容进行选择加载即可）
 	skillsContent := c.skillLoader.LoadAllSkillName()
 	if skillsContent != "" {
 		promptBuilder.WriteString(skillsContent)
